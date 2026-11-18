@@ -1,0 +1,7 @@
+**/bin/
+**/obj/
+doxygen_out/
+*.user
+*.suo
+.vs/
+installer/Output/

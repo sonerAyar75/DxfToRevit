@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>DxfToRevit.Revit.Tests</RootNamespace>
+    <RevitApiDir Condition="'$(RevitApiDir)' == ''"></RevitApiDir>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="Exists('$(RevitApiDir)\RevitAPI.dll')">
+    <DefineConstants>$(DefineConstants);REVIT_API_AVAILABLE</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DxfToRevit.Core\DxfToRevit.Core.csproj" />
+    <ProjectReference Include="..\DxfToRevit.Revit\DxfToRevit.Revit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('$(RevitApiDir)\RevitAPI.dll')">
+    <Reference Include="RevitAPI">
+      <HintPath>$(RevitApiDir)\RevitAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>$(RevitApiDir)\RevitAPIUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

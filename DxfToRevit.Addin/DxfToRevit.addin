@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <!-- Ribbon application: creates the "DxfToRevit" tab with Import DXF, Column Settings and About buttons. -->
+  <AddIn Type="Application">
+    <Name>DxfToRevit Ribbon</Name>
+    <Assembly>DxfToRevit\DxfToRevit.Addin.dll</Assembly>
+    <FullClassName>DxfToRevit.Addin.DxfToRevitApplication</FullClassName>
+    <AddInId>6a0df1f7-ec9b-4a31-a3ab-91cdd4c51d87</AddInId>
+    <VendorId>DXFTOREVIT</VendorId>
+    <VendorDescription>DxfToRevit</VendorDescription>
+  </AddIn>
+  <!-- Also exposes the import command under Add-Ins > External Tools. -->
+  <AddIn Type="Command">
+    <Name>DxfToRevit Import DXF</Name>
+    <Assembly>DxfToRevit\DxfToRevit.Addin.dll</Assembly>
+    <FullClassName>DxfToRevit.Addin.ImportDxfCommand</FullClassName>
+    <AddInId>99f31551-5531-416c-9f7e-53c57dea972b</AddInId>
+    <VendorId>DXFTOREVIT</VendorId>
+    <VendorDescription>DxfToRevit</VendorDescription>
+  </AddIn>
+</RevitAddIns>

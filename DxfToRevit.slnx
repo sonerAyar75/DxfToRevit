@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="DxfToRevit.Core/DxfToRevit.Core.csproj" />
+  <Project Path="DxfToRevit.Console/DxfToRevit.Console.csproj" />
+  <Project Path="DxfToRevit.App/DxfToRevit.App.csproj" />
+  <Project Path="DxfToRevit.Revit/DxfToRevit.Revit.csproj" />
+  <Project Path="DxfToRevit.Addin/DxfToRevit.Addin.csproj" />
+  <Project Path="DxfToRevit.Tests/DxfToRevit.Tests.csproj" />
+  <Project Path="DxfToRevit.Revit.Tests/DxfToRevit.Revit.Tests.csproj" />
+</Solution>

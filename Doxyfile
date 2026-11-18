@@ -1,0 +1,112 @@
+# Doxygen configuration for DxfToRevit.
+# Generate with:  scripts/generate-docs.ps1  (Windows)  or  scripts/generate-docs.sh
+# Output:         doxygen_out/html/index.html
+# Only non-default settings are listed; run "doxygen -x Doxyfile" to see the effective differences.
+
+#---------------------------------------------------------------------------
+# Project
+#---------------------------------------------------------------------------
+PROJECT_NAME           = "DxfToRevit"
+PROJECT_NUMBER         = "2.0"
+PROJECT_BRIEF          = "DXF walls and columns to Autodesk Revit: centerline pipeline, host-independent building model and Revit add-in"
+OUTPUT_DIRECTORY       = doxygen_out
+OUTPUT_LANGUAGE        = English
+INPUT_ENCODING         = UTF-8
+FULL_PATH_NAMES        = YES
+STRIP_FROM_PATH        = .
+JAVADOC_AUTOBRIEF      = YES
+ALWAYS_DETAILED_SEC    = YES
+INLINE_INHERITED_MEMB  = YES
+MARKDOWN_SUPPORT       = YES
+AUTOLINK_SUPPORT       = YES
+TOC_INCLUDE_HEADINGS   = 3
+OPTIMIZE_OUTPUT_JAVA   = NO
+
+#---------------------------------------------------------------------------
+# What to extract
+#---------------------------------------------------------------------------
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_PACKAGE        = YES
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+EXTRACT_ANON_NSPACES   = YES
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+SHOW_FILES             = YES
+SHOW_NAMESPACES        = YES
+SORT_MEMBER_DOCS       = YES
+SORT_BRIEF_DOCS        = YES
+GENERATE_TODOLIST      = YES
+
+#---------------------------------------------------------------------------
+# Warnings
+#---------------------------------------------------------------------------
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = NO
+WARN_LOGFILE           = doxygen_out/doxygen_warnings.log
+
+#---------------------------------------------------------------------------
+# Input
+#---------------------------------------------------------------------------
+INPUT                  = docs \
+                         DxfToRevit.Core \
+                         DxfToRevit.Revit \
+                         DxfToRevit.Addin \
+                         DxfToRevit.App \
+                         DxfToRevit.Console
+FILE_PATTERNS          = *.cs *.md
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */bin/* */obj/* */doxygen_out/*
+USE_MDFILE_AS_MAINPAGE = docs/mainpage.md
+
+# The Revit adapter code is compiled with REVIT_API_AVAILABLE inside the add-in;
+# document that variant (not the API-free stubs).
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = NO
+PREDEFINED             = REVIT_API_AVAILABLE
+
+#---------------------------------------------------------------------------
+# Source browsing
+#---------------------------------------------------------------------------
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+STRIP_CODE_COMMENTS    = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+REFERENCES_LINK_SOURCE = YES
+VERBATIM_HEADERS       = NO
+ALPHABETICAL_INDEX     = YES
+
+#---------------------------------------------------------------------------
+# HTML output
+#---------------------------------------------------------------------------
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+HTML_COLORSTYLE        = AUTO_LIGHT
+HTML_DYNAMIC_MENUS     = YES
+HTML_DYNAMIC_SECTIONS  = YES
+HTML_COPY_CLIPBOARD    = YES
+GENERATE_TREEVIEW      = YES
+FULL_SIDEBAR           = NO
+SEARCHENGINE           = YES
+SERVER_BASED_SEARCH    = NO
+GENERATE_LATEX         = NO
+
+#---------------------------------------------------------------------------
+# Diagrams
+# Built-in class diagrams are always generated. Install Graphviz and set
+# HAVE_DOT = YES for richer collaboration, call and dependency graphs.
+#---------------------------------------------------------------------------
+CLASS_GRAPH            = YES
+HAVE_DOT               = NO
+UML_LOOK               = YES
+UML_LIMIT_NUM_FIELDS   = 12
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+DOT_GRAPH_MAX_NODES    = 60

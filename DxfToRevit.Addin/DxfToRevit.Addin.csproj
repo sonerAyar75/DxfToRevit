@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>DxfToRevit.Addin</AssemblyName>
+    <RootNamespace>DxfToRevit.Addin</RootNamespace>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <!-- WinForms: settings dialog and OpenFileDialog. WPF: ribbon icons (BitmapImage). -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <!-- Revit is 64-bit and RevitAPI.dll is AMD64; matching the platform avoids warning MSB3270. -->
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- Revit assemblies reference Microsoft.VisualBasic 10.1 while the reference pack has 10.0; the version warning (MSB3277) is harmless. -->
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
+
+    <RevitVersion>2025</RevitVersion>
+    <RevitApiDir Condition="'$(RevitApiDir)' == ''">C:\Program Files\Autodesk\Revit $(RevitVersion)</RevitApiDir>
+    <AddinDeployDir Condition="'$(AddinDeployDir)' == ''">$(APPDATA)\Autodesk\Revit\Addins\$(RevitVersion)</AddinDeployDir>
+
+    <!-- The Revit adapter sources are compiled into this assembly with the real Revit API. -->
+    <DefineConstants>$(DefineConstants);REVIT_API_AVAILABLE</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Keep WinForms/Drawing implicit usings from clashing with Revit API types (Color, Rectangle, ...). -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="RevitAPI">
+      <HintPath>$(RevitApiDir)\RevitAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>$(RevitApiDir)\RevitAPIUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DxfToRevit.Core\DxfToRevit.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    The DxfToRevit.Revit sources are compiled directly (instead of a ProjectReference) so the same
+    project is not built twice with different defines, which would make the bin/obj outputs clash.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DxfToRevit.Revit\**\*.cs"
+             Exclude="..\DxfToRevit.Revit\obj\**;..\DxfToRevit.Revit\bin\**"
+             LinkBase="Revit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="DxfToRevit.addin" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Resources\*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    After each build, copy the add-in into Revit's Addins folder. Build while Revit is closed,
+    otherwise the DLL is locked. Override the destination with -p:AddinDeployDir=<folder>, or skip
+    the copy with -p:DeployAddin=false (used when building the installer).
+  -->
+  <Target Name="DeployAddin" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT' and '$(DeployAddin)' != 'false'">
+    <ItemGroup>
+      <DeployFiles Include="$(OutDir)*.dll;$(OutDir)*.pdb;$(OutDir)*.deps.json" />
+      <DeployRibbonImages Include="$(OutDir)Resources\*.png" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DeployFiles)" DestinationFolder="$(AddinDeployDir)\DxfToRevit" />
+    <MakeDir Directories="$(AddinDeployDir)\DxfToRevit\Resources" />
+    <Copy SourceFiles="@(DeployRibbonImages)" DestinationFolder="$(AddinDeployDir)\DxfToRevit\Resources" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\DxfToRevit.addin" DestinationFolder="$(AddinDeployDir)" />
+    <Message Importance="High" Text="DxfToRevit add-in deployed to $(AddinDeployDir)" />
+  </Target>
+
+</Project>

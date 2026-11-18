@@ -1,0 +1,32 @@
+<Project>
+  <!--
+    Doxygen integration.
+
+    Generate the documentation after building DxfToRevit.Core:
+      dotnet build DxfToRevit.Core -p:GenerateDocs=true
+    or run the target directly:
+      dotnet msbuild DxfToRevit.Core -t:GenerateDocs
+
+    DoxygenExe can point to a doxygen executable that is not on PATH:
+      -p:DoxygenExe="C:\Program Files\doxygen\bin\doxygen.exe"
+  -->
+  <PropertyGroup>
+    <GenerateDocs Condition="'$(GenerateDocs)' == ''">false</GenerateDocs>
+    <DoxygenExe Condition="'$(DoxygenExe)' == '' and Exists('$(ProgramFiles)\doxygen\bin\doxygen.exe')">$(ProgramFiles)\doxygen\bin\doxygen.exe</DoxygenExe>
+    <DoxygenExe Condition="'$(DoxygenExe)' == ''">doxygen</DoxygenExe>
+  </PropertyGroup>
+
+  <!-- Runs once per solution build (attached to the core project only). -->
+  <Target Name="GenerateDocsAfterBuild"
+          AfterTargets="Build"
+          Condition="'$(GenerateDocs)' == 'true' and '$(MSBuildProjectName)' == 'DxfToRevit.Core'"
+          DependsOnTargets="GenerateDocs" />
+
+  <Target Name="GenerateDocs">
+    <Message Importance="High" Text="Generating Doxygen documentation..." />
+    <MakeDir Directories="$(MSBuildThisFileDirectory)doxygen_out" />
+    <Exec Command="&quot;$(DoxygenExe)&quot; Doxyfile"
+          WorkingDirectory="$(MSBuildThisFileDirectory)" />
+    <Message Importance="High" Text="Doxygen output: $(MSBuildThisFileDirectory)doxygen_out\html\index.html" />
+  </Target>
+</Project>

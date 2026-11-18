@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DxfToRevit.Revit</RootNamespace>
+    <Description>
+      Revit API adapter. Document injected via IRevitDocumentContext.
+      Define REVIT_API_AVAILABLE and reference RevitAPI when integrating.
+    </Description>
+    <!-- Optional: -p:RevitApiDir="C:\Program Files\Autodesk\Revit 2025" -->
+    <RevitApiDir Condition="'$(RevitApiDir)' == ''"></RevitApiDir>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="Exists('$(RevitApiDir)\RevitAPI.dll')">
+    <DefineConstants>$(DefineConstants);REVIT_API_AVAILABLE</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DxfToRevit.Core\DxfToRevit.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('$(RevitApiDir)\RevitAPI.dll')">
+    <Reference Include="RevitAPI">
+      <HintPath>$(RevitApiDir)\RevitAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>$(RevitApiDir)\RevitAPIUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
