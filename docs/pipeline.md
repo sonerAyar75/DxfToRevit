@@ -11,6 +11,7 @@ result without writing anything; `Run(path, output)` also writes the simulation 
 | Wall face | `LINE` on a layer `WALL` or `WALL-*` |
 | Wall thickness | Layer suffix in centimetres: `WALL-15` → 150 mm, `WALL-20` → 200 mm |
 | Column | Closed `LWPOLYLINE` or `CIRCLE` on `COLUMN`, `COLUMNS` or `COLUMN-*` |
+| Door, window, empty opening | Rectangular (dynamic) block `door`, `window` or `opening` on the wall (see @ref openings) |
 | Units | Millimetres |
 
 Only wall lines whose layer carries a thickness code take part in face pairing.
@@ -40,7 +41,12 @@ rejected and reported as *ambiguities* instead of guessing.
 Pairing only yields centerlines where both faces overlap, so a wall with a niche, door frame or
 column pocket on one side gets a broken centerline. `OpenSideCenterLineBridger` groups collinear
 centerlines of the same layer and thickness and closes a gap when at least one *original* face
-runs continuously across it. If both faces are interrupted, the gap is a real opening and is kept.
+runs continuously across it, or when the gap lies inside an opening marker (door, window or
+opening block). Wall ends inside a marker are extended to its far edge. If both faces are
+interrupted and no marker covers the gap, the gap is kept and reported as an *unmarked gap*
+warning (unless a column or a crossing wall fills it). Jamb lines inside markers are removed
+before face pairing (`OpeningRegionFilter`), and after the footprints are built the markers are
+attached to their host walls (`OpeningInterpreter`).
 
 ### 5. Junctions
 

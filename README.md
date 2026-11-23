@@ -13,8 +13,11 @@ The geometry core is host-independent and fully unit-tested; the Revit add-in is
 - L and T junctions with angle- and thickness-aware extension limits.
 - Columns from closed polylines and circles on `COLUMN*` layers: rectangular (also rotated),
   circular (automatic round family, cylinder fallback) and freeform (generated level-bound families).
+- Doors, windows and empty openings from rectangular dynamic blocks (`door`, `window`, `opening`):
+  width from the block, depth from the host wall, heights from attributes, hinge and swing from a
+  circle, Revit types mapped per `TYPE` code (picked from loaded types or read from a file).
 - Revit 2025 ribbon with light/dark theme icons, import settings dialog and a single undo step per import.
-- DXF simulation output (`WALL-CENTERLINE`, `WALL-SOLID`, `COLUMN-SIM`) for checking results without Revit.
+- DXF simulation output (`WALL-CENTERLINE`, `WALL-SOLID`, `COLUMN-SIM`, `OPENING-SIM`) for checking results without Revit.
 
 ## Projects
 
@@ -72,8 +75,8 @@ The full documentation (guides and API reference) is generated with Doxygen:
 
 Output: `doxygen_out/html/index.html`. The guide pages are in [`docs/`](docs):
 [architecture](docs/architecture.md), [pipeline](docs/pipeline.md), [columns](docs/columns.md),
-[Revit add-in](docs/revit_addin.md), [installation](docs/installation.md), [testing](docs/testing.md)
-and [documentation](docs/documentation.md).
+[openings](docs/openings.md), [Revit add-in](docs/revit_addin.md), [installation](docs/installation.md), [testing](docs/testing.md)
+[documentation](docs/documentation.md) and [development history](docs/development_history.md).
 
 ## Ribbon icons
 

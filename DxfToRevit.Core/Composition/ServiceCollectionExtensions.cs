@@ -3,6 +3,7 @@ using DxfToRevit.Core.Building.InMemory;
 using DxfToRevit.Core.Dxf;
 using DxfToRevit.Core.Geometry;
 using DxfToRevit.Core.IO;
+using DxfToRevit.Core.Openings;
 using DxfToRevit.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -30,6 +31,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<DxfReader>();
         services.AddTransient<DxfGeometryReader>();
         services.AddTransient<DxfColumnReader>();
+        services.AddTransient<DxfOpeningReader>();
+        services.AddTransient<OpeningRegionFilter>();
+        services.AddTransient<OpeningInterpreter>();
+        services.AddTransient<UnmarkedGapReporter>();
         services.AddTransient<DxfLineClassifier>();
         services.AddTransient<DxfLineClassificationService>();
         services.AddTransient<DxfLineImportService>();
@@ -82,6 +87,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<InMemoryBuildingModel>();
         services.AddTransient<IWallCreator, InMemoryWallCreator>();
         services.AddTransient<IColumnCreator, InMemoryColumnCreator>();
+        services.AddTransient<IOpeningCreator, InMemoryOpeningCreator>();
         services.AddTransient<BuildingModelService>();
 
         return services;

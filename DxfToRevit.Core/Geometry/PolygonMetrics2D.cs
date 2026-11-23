@@ -273,4 +273,51 @@ public static class PolygonMetrics2D
         rotationRadians = angle;
         return true;
     }
+
+    /// <summary>
+    /// Whether a point lies inside the polygon or within <paramref name="toleranceMm"/> of its
+    /// boundary (even-odd rule for the interior).
+    /// </summary>
+    /// <param name="outline">Polygon vertices (closing vertex not repeated).</param>
+    /// <param name="point">Point to test.</param>
+    /// <param name="toleranceMm">Distance from the boundary that still counts as inside.</param>
+    /// <returns><c>false</c> for polygons with fewer than three vertices.</returns>
+    public static bool ContainsPoint(IReadOnlyList<Vector2> outline, Vector2 point, double toleranceMm = 0)
+    {
+        if (outline is null || outline.Count < 3)
+            return false;
+
+        bool inside = false;
+        int n = outline.Count;
+        for (int i = 0, j = n - 1; i < n; j = i++)
+        {
+            Vector2 a = outline[i];
+            Vector2 b = outline[j];
+
+            if (DistanceToSegment(point, a, b) <= toleranceMm)
+                return true;
+
+            bool crosses = (a.Y > point.Y) != (b.Y > point.Y) &&
+                           point.X < (b.X - a.X) * (point.Y - a.Y) / (b.Y - a.Y) + a.X;
+            if (crosses)
+                inside = !inside;
+        }
+
+        return inside;
+    }
+
+    /// <summary>Shortest distance from <paramref name="p"/> to the segment <paramref name="a"/>–<paramref name="b"/>.</summary>
+    /// <param name="p">Point.</param>
+    /// <param name="a">Segment start.</param>
+    /// <param name="b">Segment end.</param>
+    public static double DistanceToSegment(Vector2 p, Vector2 a, Vector2 b)
+    {
+        Vector2 ab = b - a;
+        double lengthSquared = Vector2.DotProduct(ab, ab);
+        if (lengthSquared < 1e-12)
+            return Vector2.Distance(p, a);
+
+        double t = Math.Clamp(Vector2.DotProduct(p - a, ab) / lengthSquared, 0, 1);
+        return Vector2.Distance(p, a + ab * t);
+    }
 }

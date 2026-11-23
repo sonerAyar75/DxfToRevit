@@ -16,23 +16,76 @@ public sealed class BuildingModelService
     private readonly IColumnCreator? _columnCreator;
     private readonly WallCreationValidator _wallValidator;
     private readonly ColumnCreationValidator _columnValidator;
+    private readonly IOpeningCreator? _openingCreator;
+    private readonly OpeningCreationValidator _openingValidator;
 
     /// <summary>Creates the service.</summary>
     /// <param name="wallCreator">Host wall creator (required).</param>
     /// <param name="columnCreator">Host column creator; when <c>null</c>, every column request fails.</param>
     /// <param name="wallValidator">Wall validator; a default validator is used when <c>null</c>.</param>
     /// <param name="columnValidator">Column validator; a default validator is used when <c>null</c>.</param>
+    /// <param name="openingCreator">Host opening creator; when <c>null</c>, every opening request fails.</param>
+    /// <param name="openingValidator">Opening validator; a default validator is used when <c>null</c>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="wallCreator"/> is <c>null</c>.</exception>
     public BuildingModelService(
         IWallCreator wallCreator,
         IColumnCreator? columnCreator = null,
         WallCreationValidator? wallValidator = null,
-        ColumnCreationValidator? columnValidator = null)
+        ColumnCreationValidator? columnValidator = null,
+        IOpeningCreator? openingCreator = null,
+        OpeningCreationValidator? openingValidator = null)
     {
         _wallCreator = wallCreator ?? throw new ArgumentNullException(nameof(wallCreator));
         _columnCreator = columnCreator;
         _wallValidator = wallValidator ?? new WallCreationValidator();
         _columnValidator = columnValidator ?? new ColumnCreationValidator();
+        _openingCreator = openingCreator;
+        _openingValidator = openingValidator ?? new OpeningCreationValidator();
+    }
+
+    /// <summary>
+    /// Validates the opening requests and creates them in their host walls. Must be called after
+    /// <see cref="CreateWalls"/>: <paramref name="hostWallIds"/> maps each wall request id to the
+    /// element the host created for it.
+    /// </summary>
+    /// <param name="requests">Opening requests.</param>
+    /// <param name="hostWallIds">Wall request id → host element id of the created walls.</param>
+    /// <returns>One result per request, in request order.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    public IReadOnlyList<OpeningCreationResult> CreateOpenings(
+        IEnumerable<OpeningCreationRequest> requests,
+        IReadOnlyDictionary<string, string> hostWallIds)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+        ArgumentNullException.ThrowIfNull(hostWallIds);
+
+        var results = new List<OpeningCreationResult>();
+        foreach (OpeningCreationRequest request in requests)
+        {
+            if (_openingCreator is null)
+            {
+                results.Add(OpeningCreationResult.Fail(request.Id, "No IOpeningCreator configured."));
+                continue;
+            }
+
+            string? error = _openingValidator.Validate(request);
+            if (error is not null)
+            {
+                results.Add(OpeningCreationResult.Fail(request.Id, error));
+                continue;
+            }
+
+            if (!hostWallIds.TryGetValue(request.HostWallRequestId, out string? hostWallId))
+            {
+                results.Add(OpeningCreationResult.Fail(request.Id,
+                    $"Host wall {request.HostWallRequestId} was not created, so the opening has no host."));
+                continue;
+            }
+
+            results.Add(_openingCreator.CreateOpening(request, hostWallId));
+        }
+
+        return results;
     }
 
     /// <summary>

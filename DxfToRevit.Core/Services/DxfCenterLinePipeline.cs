@@ -2,6 +2,7 @@ using DxfToRevit.Core.Dxf;
 using DxfToRevit.Core.Geometry;
 using DxfToRevit.Core.IO;
 using DxfToRevit.Core.Models;
+using DxfToRevit.Core.Openings;
 using netDxf;
 
 namespace DxfToRevit.Core.Services;
@@ -42,6 +43,10 @@ public sealed class DxfCenterLinePipeline
     private readonly DxfReader _dxfReader;
     private readonly DxfColumnReader _columnReader;
     private readonly DxfSimulationWriter _simulationWriter;
+    private readonly DxfOpeningReader _openingReader;
+    private readonly OpeningRegionFilter _openingRegionFilter;
+    private readonly OpeningInterpreter _openingInterpreter;
+    private readonly UnmarkedGapReporter _unmarkedGapReporter;
 
     /// <summary>Summary and products of one pipeline run.</summary>
     public sealed class Result
@@ -81,10 +86,29 @@ public sealed class DxfCenterLinePipeline
 
         /// <summary>Columns read from the DXF.</summary>
         public IReadOnlyList<ColumnModel> Columns { get; init; } = Array.Empty<ColumnModel>();
+
+        /// <summary>Number of opening markers found in the DXF.</summary>
+        public int OpeningMarkerCount { get; init; }
+
+        /// <summary>Openings attached to the wall footprints (hosted by <see cref="WallSolids"/>).</summary>
+        public IReadOnlyList<OpeningModel> Openings { get; init; } = Array.Empty<OpeningModel>();
+
+        /// <summary>Opening errors (not created) and warnings, including unmarked wall gaps.</summary>
+        public IReadOnlyList<OpeningIssue> OpeningIssues { get; init; } = Array.Empty<OpeningIssue>();
     }
 
     /// <summary>Creates the pipeline with default collaborators (when there is no composition root).</summary>
     public DxfCenterLinePipeline()
+        : this(OpeningDefinitionRegistry.CreateDefault())
+    {
+    }
+
+    /// <summary>
+    /// Creates the pipeline with default collaborators and the given opening kinds (for example with
+    /// default heights chosen by the user).
+    /// </summary>
+    /// <param name="openingDefinitions">Opening kinds recognised in the DXF.</param>
+    public DxfCenterLinePipeline(OpeningDefinitionRegistry openingDefinitions)
         : this(
             new DxfLineImportService(),
             new WallFacePairFinder(),
@@ -95,7 +119,8 @@ public sealed class DxfCenterLinePipeline
             new WallFootprintBuilder(),
             new DxfReader(),
             new DxfColumnReader(),
-            new DxfSimulationWriter())
+            new DxfSimulationWriter(),
+            new DxfOpeningReader(openingDefinitions ?? throw new ArgumentNullException(nameof(openingDefinitions))))
     {
     }
 
@@ -110,7 +135,11 @@ public sealed class DxfCenterLinePipeline
     /// <param name="dxfReader">Loads the DXF file.</param>
     /// <param name="columnReader">Reads columns.</param>
     /// <param name="simulationWriter">Writes the simulation DXF.</param>
-    /// <exception cref="ArgumentNullException">A collaborator is <c>null</c>.</exception>
+    /// <param name="openingReader">Reads opening markers; default kinds when <c>null</c>.</param>
+    /// <param name="openingRegionFilter">Removes jamb lines inside markers; default when <c>null</c>.</param>
+    /// <param name="openingInterpreter">Attaches markers to walls; default when <c>null</c>.</param>
+    /// <param name="unmarkedGapReporter">Reports unmarked wall gaps; default when <c>null</c>.</param>
+    /// <exception cref="ArgumentNullException">A required collaborator is <c>null</c>.</exception>
     public DxfCenterLinePipeline(
         DxfLineImportService importService,
         WallFacePairFinder pairFinder,
@@ -121,8 +150,16 @@ public sealed class DxfCenterLinePipeline
         WallFootprintBuilder footprintBuilder,
         DxfReader dxfReader,
         DxfColumnReader columnReader,
-        DxfSimulationWriter simulationWriter)
+        DxfSimulationWriter simulationWriter,
+        DxfOpeningReader? openingReader = null,
+        OpeningRegionFilter? openingRegionFilter = null,
+        OpeningInterpreter? openingInterpreter = null,
+        UnmarkedGapReporter? unmarkedGapReporter = null)
     {
+        _openingReader = openingReader ?? new DxfOpeningReader();
+        _openingRegionFilter = openingRegionFilter ?? new OpeningRegionFilter();
+        _openingInterpreter = openingInterpreter ?? new OpeningInterpreter();
+        _unmarkedGapReporter = unmarkedGapReporter ?? new UnmarkedGapReporter();
         _importService = importService ?? throw new ArgumentNullException(nameof(importService));
         _pairFinder = pairFinder ?? throw new ArgumentNullException(nameof(pairFinder));
         _wallManager = wallManager ?? throw new ArgumentNullException(nameof(wallManager));
@@ -179,14 +216,23 @@ public sealed class DxfCenterLinePipeline
         IReadOnlyList<ClassifiedDxfLine> classifiedLines = _importService.Import(document);
         int wallCount = classifiedLines.Count(l => l.IsWallLayer);
 
-        WallFacePairFinderResult pairResult = _pairFinder.FindPairs(classifiedLines);
+        // Opening markers: jamb lines inside them are ignored and the wall runs through them.
+        DxfOpeningReadResult markerResult = _openingReader.ReadMarkers(document);
+        IReadOnlyList<OpeningMarker> markers = markerResult.Markers;
+        IReadOnlyList<ClassifiedDxfLine> wallInput =
+            _openingRegionFilter.RemoveLinesInside(classifiedLines, markers, out _);
+
+        WallFacePairFinderResult pairResult = _pairFinder.FindPairs(wallInput);
 
         var walls = new List<WallModel>();
         int index = 0;
         foreach (WallFacePair pair in pairResult.Pairs)
             walls.Add(_wallManager.CreateFromFacePair($"W{++index:D3}", pair));
 
-        IReadOnlyList<LineSegment2D> bridgedCenterLines = _bridger.Bridge(walls, pairResult.Pairs);
+        IReadOnlyList<ColumnModel> columns = _columnReader.ReadColumns(document);
+
+        IReadOnlyList<LineSegment2D> bridgedCenterLines = _bridger.Bridge(
+            walls, pairResult.Pairs, markers.Select(m => m.Outline).ToList(), out IReadOnlyList<LineSegment2D> openGaps);
         var thicknesses = AssignThicknesses(bridgedCenterLines, walls);
 
         // Junction processing keeps order and count, so the thickness list stays aligned.
@@ -201,10 +247,17 @@ public sealed class DxfCenterLinePipeline
         var mergedThicknesses = mergedWithThickness.Select(m => m.ThicknessMm).ToList();
         IReadOnlyList<WallSolid2D> wallSolids = _footprintBuilder.BuildMany(merged, mergedThicknesses);
 
-        IReadOnlyList<ColumnModel> columns = _columnReader.ReadColumns(document);
+        OpeningInterpretation openings = _openingInterpreter.Interpret(markers, wallSolids);
+        var openingIssues = markerResult.Issues
+            .Concat(openings.Issues)
+            .Concat(_unmarkedGapReporter.Report(openGaps, walls, columns))
+            .ToList();
 
         if (writeOutput)
-            _simulationWriter.Write(document, outputPath!, merged, wallSolids, columns);
+        {
+            _simulationWriter.Write(document, outputPath!, merged, wallSolids, columns,
+                openings.Openings.Select(o => o.Marker.Outline));
+        }
 
         return new Result
         {
@@ -219,7 +272,10 @@ public sealed class DxfCenterLinePipeline
             ColumnCount = columns.Count,
             Ambiguities = pairResult.Ambiguities.ToList(),
             WallSolids = wallSolids,
-            Columns = columns
+            Columns = columns,
+            OpeningMarkerCount = markers.Count,
+            Openings = openings.Openings,
+            OpeningIssues = openingIssues
         };
     }
 

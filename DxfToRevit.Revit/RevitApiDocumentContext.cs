@@ -25,20 +25,64 @@ namespace DxfToRevit.Revit;
 public sealed class RevitApiDocumentContext : IRevitDocumentContext
 {
     private readonly RevitElementCreatePlanner _planner = new();
+    private readonly OpeningCreateArgsMapper _openingMapper = new();
 
 #if REVIT_API_AVAILABLE
     private readonly Autodesk.Revit.DB.Document _document;
     private readonly RevitElementResolver _resolver;
+    private readonly OpeningOrientationPlanner _orientationPlanner;
     private RevitFreeformColumnFamilyBuilder? _freeformFamilies;
+    private readonly List<PendingHanding> _pendingHandings = new();
+    private RevitImportBatch? _batch;
+
+    /// <summary>
+    /// Starts a batch: one transaction for the whole import in which every element is created in its
+    /// own sub-transaction (so a failing element still rolls back alone), Revit warnings are
+    /// suppressed and failing elements are removed at commit instead of failing the batch.
+    /// The document regenerates and redraws once, at <see cref="RevitImportBatch.Commit"/>.
+    /// </summary>
+    /// <param name="name">Transaction name shown in the undo list.</param>
+    /// <exception cref="System.InvalidOperationException">A batch or another transaction is already open.</exception>
+    public RevitImportBatch BeginBatch(string name)
+    {
+        if (_batch is not null || _document.IsModifiable)
+            throw new InvalidOperationException("A transaction is already open on the document.");
+
+        _pendingHandings.Clear();
+        _batch = new RevitImportBatch(this, _document, name);
+        return _batch;
+    }
+
+    /// <summary>Called by the batch when it ends.</summary>
+    internal void EndBatch(RevitImportBatch batch)
+    {
+        if (ReferenceEquals(_batch, batch))
+        {
+            _batch = null;
+            _pendingHandings.Clear();
+        }
+    }
 
     /// <summary>Binds the context to a project document.</summary>
     /// <param name="document">Open Revit project document.</param>
+    /// <param name="orientationPlanner">Door flip conventions; the standard conventions when <c>null</c>.</param>
     /// <exception cref="System.ArgumentNullException"><paramref name="document"/> is <c>null</c>.</exception>
-    public RevitApiDocumentContext(Autodesk.Revit.DB.Document document)
+    public RevitApiDocumentContext(Autodesk.Revit.DB.Document document, OpeningOrientationPlanner? orientationPlanner = null)
     {
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _resolver = new RevitElementResolver(document);
+        _orientationPlanner = orientationPlanner ?? new OpeningOrientationPlanner();
     }
+
+    /// <summary>
+    /// Door and window types loaded in the document, as <c>Family::Type</c> keys sorted by name.
+    /// Used by the settings form to offer types for the opening type map.
+    /// </summary>
+    /// <param name="category">Door or window.</param>
+    public IReadOnlyList<string> GetOpeningTypeKeys(Core.Openings.OpeningCategory category) =>
+        _resolver.CollectOpeningSymbols(category)
+            .Select(s => OpeningTypeKey.Format(s.FamilyName, s.Name))
+            .ToList();
 
     /// <inheritdoc />
     public bool IsAvailable => _document is { IsValidObject: true } && !_document.IsReadOnly;
@@ -72,8 +116,7 @@ public sealed class RevitApiDocumentContext : IRevitDocumentContext
             if (wallType is null)
                 return WallCreationResult.Fail(request.Id, typeError ?? "WallType not resolved.");
 
-            using var tx = new Autodesk.Revit.DB.Transaction(_document, "DxfToRevit Create Wall");
-            tx.Start();
+            using var tx = RevitChangeScope.Start(_document, "DxfToRevit Create Wall");
 
             Autodesk.Revit.DB.Wall wall = Autodesk.Revit.DB.Wall.Create(
                 _document, line, wallType.Id, level.Id,
@@ -180,8 +223,7 @@ public sealed class RevitApiDocumentContext : IRevitDocumentContext
 
         var location = new Autodesk.Revit.DB.XYZ(args.LocationXFeet, args.LocationYFeet, level.Elevation);
 
-        using var tx = new Autodesk.Revit.DB.Transaction(_document, "DxfToRevit Create Column");
-        tx.Start();
+        using var tx = RevitChangeScope.Start(_document, "DxfToRevit Create Column");
 
         if (!symbol.IsActive)
             symbol.Activate();
@@ -372,8 +414,7 @@ public sealed class RevitApiDocumentContext : IRevitDocumentContext
             if (Autodesk.Revit.DB.DirectShape.IsValidCategoryId(columns, _document))
                 categoryId = columns;
 
-            using var tx = new Autodesk.Revit.DB.Transaction(_document, transactionName);
-            tx.Start();
+            using var tx = RevitChangeScope.Start(_document, transactionName);
             Autodesk.Revit.DB.DirectShape directShape = CreateDirectShape(categoryId, args.RequestId, solid);
             tx.Commit();
 
@@ -408,6 +449,178 @@ public sealed class RevitApiDocumentContext : IRevitDocumentContext
         directShape.SetShape(new List<Autodesk.Revit.DB.GeometryObject> { solid });
         return directShape;
     }
+
+    /// <inheritdoc />
+    public OpeningCreationResult CreateOpening(OpeningCreationRequest request, string hostWallElementId)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!IsAvailable)
+            return OpeningCreationResult.Fail(request.Id, "Revit Document is not available or is read-only.");
+
+        OpeningCreateArgs args;
+        try { args = _openingMapper.Map(request); }
+        catch (ArgumentException ex) { return OpeningCreationResult.Fail(request.Id, ex.Message); }
+
+        try
+        {
+            if (!long.TryParse(hostWallElementId, out long wallIdValue) ||
+                _document.GetElement(new Autodesk.Revit.DB.ElementId(wallIdValue)) is not Autodesk.Revit.DB.Wall wall)
+                return OpeningCreationResult.Fail(request.Id, $"Host wall element {hostWallElementId} was not found.");
+
+            Autodesk.Revit.DB.Level? level = _resolver.ResolveLevel(args.LevelName, out string? levelError);
+            if (level is null)
+                return OpeningCreationResult.Fail(request.Id, levelError ?? "Level not resolved.");
+
+            return args.CreationMode == Core.Openings.OpeningCreationMode.WallOpening
+                ? CreateWallOpening(args, wall, level)
+                : CreateHostedOpening(args, wall, level);
+        }
+        catch (Exception ex)
+        {
+            return OpeningCreationResult.Fail(request.Id, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Places a door or window family instance in the wall, sets its sill height and flips it so the
+    /// hinge and swing match the DXF marker.
+    /// </summary>
+    private OpeningCreationResult CreateHostedOpening(
+        OpeningCreateArgs args, Autodesk.Revit.DB.Wall wall, Autodesk.Revit.DB.Level level)
+    {
+        if (string.IsNullOrWhiteSpace(args.TypeKey))
+            return OpeningCreationResult.Fail(args.RequestId, $"No Revit type is mapped for this {args.Category}.");
+
+        Autodesk.Revit.DB.FamilySymbol? symbol = _resolver.ResolveOpeningSymbol(
+            args.TypeKey, args.Category, args.WidthMm, args.HeightMm, out string? typeError);
+        if (symbol is null)
+            return OpeningCreationResult.Fail(args.RequestId, typeError ?? $"{args.Category} type not resolved.");
+
+        var location = new Autodesk.Revit.DB.XYZ(args.LocationXFeet, args.LocationYFeet, level.Elevation);
+
+        using var tx = RevitChangeScope.Start(_document, $"DxfToRevit Create {args.Category}");
+
+        if (!symbol.IsActive)
+            symbol.Activate();
+
+        Autodesk.Revit.DB.FamilyInstance instance = _document.Create.NewFamilyInstance(
+            location, symbol, wall, level, Autodesk.Revit.DB.Structure.StructuralType.NonStructural);
+
+        string? note = null;
+        if (args.Category == Core.Openings.OpeningCategory.Window || args.SillHeightFeet > 1e-9)
+        {
+            Autodesk.Revit.DB.Parameter? sill = instance.get_Parameter(
+                Autodesk.Revit.DB.BuiltInParameter.INSTANCE_SILL_HEIGHT_PARAM);
+            if (sill is { IsReadOnly: false })
+                sill.Set(args.SillHeightFeet);
+            else
+                note = "Sill height parameter is not writable; the family default was kept.";
+        }
+
+        var pending = new PendingHanding(instance.Id, args);
+        if (args.Handing is not null)
+        {
+            if (_batch is not null)
+            {
+                // In a batch all doors are flipped together, with two regenerations in total.
+                _pendingHandings.Add(pending);
+            }
+            else
+            {
+                note = Combine(note, ApplyHandings(new[] { pending }).GetValueOrDefault(args.RequestId));
+            }
+        }
+
+        tx.Commit();
+        return new OpeningCreationResult(args.RequestId, true, instance.Id.Value.ToString(), note);
+    }
+
+    /// <summary>A placed door whose hinge and swing are applied later (in a batch).</summary>
+    private sealed record PendingHanding(Autodesk.Revit.DB.ElementId InstanceId, OpeningCreateArgs Args);
+
+    /// <summary>Applies the door flips deferred during the current batch; returns notes by request id.</summary>
+    internal IReadOnlyDictionary<string, string> ApplyPendingHandings()
+    {
+        IReadOnlyDictionary<string, string> notes = ApplyHandings(_pendingHandings);
+        _pendingHandings.Clear();
+        return notes;
+    }
+
+    /// <summary>
+    /// Flips each instance's facing, then its hand, when its orientation differs from the DXF
+    /// marker. The orientations are read after one regeneration per step, not per door. Returns a
+    /// note (by request id) when a required flip is not allowed by the family.
+    /// </summary>
+    private IReadOnlyDictionary<string, string> ApplyHandings(IReadOnlyCollection<PendingHanding> items)
+    {
+        var notes = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (items.Count == 0)
+            return notes;
+
+        var doors = items
+            .Select(p => (p.Args, Instance: _document.GetElement(p.InstanceId) as Autodesk.Revit.DB.FamilyInstance))
+            .Where(d => d.Instance is { IsValidObject: true } && d.Args.Handing is not null)
+            .ToList();
+
+        _document.Regenerate();
+        bool facingFlipped = false;
+        foreach (var (args, instance) in doors)
+        {
+            Autodesk.Revit.DB.XYZ facing = instance!.FacingOrientation;
+            if (!_orientationPlanner.NeedsFacingFlip((args.DirectionX, args.DirectionY), args.Handing!, (facing.X, facing.Y)))
+                continue;
+
+            if (instance.CanFlipFacing)
+            {
+                instance.flipFacing();
+                facingFlipped = true;
+            }
+            else
+            {
+                notes[args.RequestId] = "The family cannot flip facing; the swing side may differ from the DXF.";
+            }
+        }
+
+        if (facingFlipped)
+            _document.Regenerate();
+
+        foreach (var (args, instance) in doors)
+        {
+            Autodesk.Revit.DB.XYZ hand = instance!.HandOrientation;
+            if (!_orientationPlanner.NeedsHandFlip((args.DirectionX, args.DirectionY), args.Handing!, (hand.X, hand.Y)))
+                continue;
+
+            if (instance.CanFlipHand)
+                instance.flipHand();
+            else
+                notes[args.RequestId] = Combine(notes.GetValueOrDefault(args.RequestId),
+                    "The family cannot flip hand; the hinge side may differ from the DXF.")!;
+        }
+
+        return notes;
+    }
+
+    /// <summary>Cuts a rectangular opening in the wall from the sill height up to sill + height.</summary>
+    private OpeningCreationResult CreateWallOpening(
+        OpeningCreateArgs args, Autodesk.Revit.DB.Wall wall, Autodesk.Revit.DB.Level level)
+    {
+        double half = args.WidthFeet / 2.0;
+        double bottom = level.Elevation + args.SillHeightFeet;
+        var first = new Autodesk.Revit.DB.XYZ(
+            args.LocationXFeet - args.DirectionX * half, args.LocationYFeet - args.DirectionY * half, bottom);
+        var second = new Autodesk.Revit.DB.XYZ(
+            args.LocationXFeet + args.DirectionX * half, args.LocationYFeet + args.DirectionY * half, bottom + args.HeightFeet);
+
+        using var tx = RevitChangeScope.Start(_document, "DxfToRevit Create Wall Opening");
+        Autodesk.Revit.DB.Opening opening = _document.Create.NewOpening(wall, first, second);
+        tx.Commit();
+
+        return OpeningCreationResult.Ok(args.RequestId, opening.Id.Value.ToString());
+    }
+
+    /// <summary>Joins two optional notes with a space.</summary>
+    private static string? Combine(string? first, string? second) =>
+        first is null ? second : second is null ? first : $"{first} {second}";
 
     /// <summary>
     /// Resolves the top level name. A blank name means "Unconnected" (returns <c>true</c> with
@@ -487,6 +700,27 @@ public sealed class RevitApiDocumentContext : IRevitDocumentContext
         catch (ArgumentException ex)
         {
             return ColumnCreationResult.Fail(request.Id, ex.Message);
+        }
+    }
+
+    /// <summary>Fails and reports the planned opening values (no Revit API in this build).</summary>
+    /// <param name="request">Opening request.</param>
+    /// <param name="hostWallElementId">Host wall element id.</param>
+    public OpeningCreationResult CreateOpening(OpeningCreationRequest request, string hostWallElementId)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        try
+        {
+            OpeningCreateArgs args = _openingMapper.Map(request);
+            return OpeningCreationResult.Fail(
+                request.Id,
+                "No REVIT_API_AVAILABLE. " +
+                $"Planned {args.Category}: Type={args.TypeKey ?? "(wall opening)"}, Host={hostWallElementId}, " +
+                $"W/H={args.WidthMm}/{args.HeightMm} mm.");
+        }
+        catch (ArgumentException ex)
+        {
+            return OpeningCreationResult.Fail(request.Id, ex.Message);
         }
     }
 #endif

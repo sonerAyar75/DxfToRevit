@@ -11,7 +11,9 @@ namespace DxfToRevit.Core.Geometry;
 /// door frame on one side gets a broken centerline. Collinear centerlines of the same layer and
 /// thickness are grouped; a gap between two pieces is bridged when at least one original
 /// (untrimmed) face runs continuously across it. When both faces are interrupted the gap is a real
-/// opening and is preserved.
+/// opening and is preserved — unless an opening marker covers it: a marked door, window or opening
+/// sits in a continuous wall, so the gap is bridged, and a wall end inside a marker is extended to
+/// the far side of the marker (for openings next to a column or a corner).
 /// </remarks>
 public sealed class OpenSideCenterLineBridger
 {
@@ -27,10 +29,28 @@ public sealed class OpenSideCenterLineBridger
     /// <exception cref="ArgumentException">The two lists have different lengths.</exception>
     public IReadOnlyList<LineSegment2D> Bridge(
         IReadOnlyList<WallModel> walls,
-        IReadOnlyList<WallFacePair> pairs)
+        IReadOnlyList<WallFacePair> pairs) =>
+        Bridge(walls, pairs, Array.Empty<IReadOnlyList<Vector2>>(), out _);
+
+    /// <summary>
+    /// Applies the open-side bridge and also bridges every gap covered by an opening marker.
+    /// </summary>
+    /// <param name="walls">Wall models; walls without a centerline are ignored.</param>
+    /// <param name="pairs">Face pair of each wall, in the same order.</param>
+    /// <param name="openingOutlines">Opening marker rectangles: gaps inside them are bridged and wall ends inside them are extended through them.</param>
+    /// <param name="openGaps">Gaps between collinear pieces that were left open (centerline segment across each gap).</param>
+    /// <returns>Bridged centerlines.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">The wall and pair lists have different lengths.</exception>
+    public IReadOnlyList<LineSegment2D> Bridge(
+        IReadOnlyList<WallModel> walls,
+        IReadOnlyList<WallFacePair> pairs,
+        IReadOnlyList<IReadOnlyList<Vector2>> openingOutlines,
+        out IReadOnlyList<LineSegment2D> openGaps)
     {
         ArgumentNullException.ThrowIfNull(walls);
         ArgumentNullException.ThrowIfNull(pairs);
+        ArgumentNullException.ThrowIfNull(openingOutlines);
 
         if (walls.Count != pairs.Count)
             throw new ArgumentException("walls and pairs must have the same count.");
@@ -43,6 +63,8 @@ public sealed class OpenSideCenterLineBridger
             items.Add(new WallItem(walls[i], pairs[i]));
         }
 
+        var gaps = new List<LineSegment2D>();
+        openGaps = gaps;
         if (items.Count == 0)
             return Array.Empty<LineSegment2D>();
 
@@ -50,7 +72,7 @@ public sealed class OpenSideCenterLineBridger
         var result = new List<LineSegment2D>();
 
         foreach (var group in groups)
-            result.AddRange(BridgeGroup(group));
+            result.AddRange(BridgeGroup(group, openingOutlines, gaps));
 
         return result;
     }
@@ -95,12 +117,16 @@ public sealed class OpenSideCenterLineBridger
     }
 
     /// <summary>
-    /// Merges one collinear group: centerline intervals are joined when they touch or when an
-    /// original face covers the gap between them.
+    /// Merges one collinear group: centerline intervals are joined when they touch, when an
+    /// original face covers the gap between them, or when an opening marker covers it. Ends lying
+    /// inside a marker are extended through it. Gaps left open are added to <paramref name="openGaps"/>.
     /// </summary>
-    private static List<LineSegment2D> BridgeGroup(List<WallItem> group)
+    private static List<LineSegment2D> BridgeGroup(
+        List<WallItem> group,
+        IReadOnlyList<IReadOnlyList<Vector2>> openingOutlines,
+        List<LineSegment2D> openGaps)
     {
-        if (group.Count == 1)
+        if (group.Count == 1 && openingOutlines.Count == 0)
             return new List<LineSegment2D> { group[0].CenterLine };
 
         LineSegment2D reference = group
@@ -153,10 +179,13 @@ public sealed class OpenSideCenterLineBridger
                 continue;
             }
 
-            if (FaceCoversGap(faceIntervals, curMax, nextMin))
+            Vector2 gapStart = origin + unit * curMax;
+            Vector2 gapEnd = origin + unit * nextMin;
+            if (FaceCoversGap(faceIntervals, curMax, nextMin) || OpeningCoversGap(openingOutlines, gapStart, gapEnd))
                 curMax = Math.Max(curMax, nextMax);
             else
             {
+                openGaps.Add(new LineSegment2D(gapStart, gapEnd));
                 merged.Add((curMin, curMax));
                 curMin = nextMin;
                 curMax = nextMax;
@@ -166,8 +195,10 @@ public sealed class OpenSideCenterLineBridger
         merged.Add((curMin, curMax));
 
         var result = new List<LineSegment2D>();
-        foreach (var (min, max) in merged)
+        foreach (var (rawMin, rawMax) in merged)
         {
+            (double min, double max) = ExtendEndsThroughOpenings(
+                openingOutlines, origin, unit, group[0].Thickness, rawMin, rawMax);
             if (max - min < GeometryTolerance.PointDistanceMm)
                 continue;
             result.Add(new LineSegment2D(
@@ -176,6 +207,46 @@ public sealed class OpenSideCenterLineBridger
         }
 
         return result;
+    }
+
+    /// <summary>Whether one opening marker contains both ends of the gap (within the point tolerance).</summary>
+    private static bool OpeningCoversGap(
+        IReadOnlyList<IReadOnlyList<Vector2>> openingOutlines, Vector2 gapStart, Vector2 gapEnd)
+    {
+        const double tol = GeometryTolerance.PointDistanceMm;
+        return openingOutlines.Any(outline =>
+            PolygonMetrics2D.ContainsPoint(outline, gapStart, tol) &&
+            PolygonMetrics2D.ContainsPoint(outline, gapEnd, tol));
+    }
+
+    /// <summary>
+    /// Extends an interval end that lies inside an opening marker to the far side of that marker
+    /// along the axis, so a wall ending at an opening (next to a column or corner) runs through it.
+    /// Only markers centred on this wall (within half its thickness) are considered, so a wall that
+    /// merely touches another wall's opening is not extended.
+    /// </summary>
+    private static (double Min, double Max) ExtendEndsThroughOpenings(
+        IReadOnlyList<IReadOnlyList<Vector2>> openingOutlines, Vector2 origin, Vector2 unit,
+        double thickness, double min, double max)
+    {
+        const double tol = GeometryTolerance.PointDistanceMm;
+        var normal = new Vector2(-unit.Y, unit.X);
+        foreach (IReadOnlyList<Vector2> outline in openingOutlines)
+        {
+            var center = new Vector2(outline.Average(p => p.X), outline.Average(p => p.Y));
+            if (Math.Abs(Vector2.DotProduct(center - origin, normal)) > thickness / 2.0 + tol)
+                continue;
+
+            double markerMin = outline.Min(p => Project(p, origin, unit));
+            double markerMax = outline.Max(p => Project(p, origin, unit));
+
+            if (PolygonMetrics2D.ContainsPoint(outline, origin + unit * max, tol))
+                max = Math.Max(max, markerMax);
+            if (PolygonMetrics2D.ContainsPoint(outline, origin + unit * min, tol))
+                min = Math.Min(min, markerMin);
+        }
+
+        return (min, max);
     }
 
     /// <summary>

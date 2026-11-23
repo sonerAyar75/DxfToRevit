@@ -22,6 +22,9 @@ public sealed class DxfSimulationWriter
     /// <summary>Layer that receives the column sections.</summary>
     public const string ColumnSimLayer = "COLUMN-SIM";
 
+    /// <summary>Layer that receives the recognised opening rectangles.</summary>
+    public const string OpeningSimLayer = "OPENING-SIM";
+
     /// <summary>
     /// Loads <paramref name="inputPath"/>, adds the simulation entities and saves the result to
     /// <paramref name="outputPath"/>. The input file is not modified.
@@ -62,6 +65,7 @@ public sealed class DxfSimulationWriter
     /// <param name="centerLines">Wall centerlines; degenerate segments are skipped.</param>
     /// <param name="wallSolids">Wall footprints.</param>
     /// <param name="columns">Column sections.</param>
+    /// <param name="openingOutlines">Recognised opening rectangles; none when <c>null</c>.</param>
     /// <exception cref="ArgumentException"><paramref name="outputPath"/> is empty.</exception>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     public void Write(
@@ -69,7 +73,8 @@ public sealed class DxfSimulationWriter
         string outputPath,
         IEnumerable<LineSegment2D> centerLines,
         IEnumerable<WallSolid2D> wallSolids,
-        IEnumerable<ColumnModel> columns)
+        IEnumerable<ColumnModel> columns,
+        IEnumerable<IReadOnlyList<Vector2>>? openingOutlines = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -99,6 +104,13 @@ public sealed class DxfSimulationWriter
 
         foreach (ColumnModel column in columns)
             document.Entities.Add(CreateClosedPolyline(column.Outline, colLayer));
+
+        if (openingOutlines is not null)
+        {
+            Layer openingLayer = GetOrAddLayer(document, OpeningSimLayer);
+            foreach (IReadOnlyList<Vector2> outline in openingOutlines)
+                document.Entities.Add(CreateClosedPolyline(outline, openingLayer));
+        }
 
         string? dir = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrWhiteSpace(dir))

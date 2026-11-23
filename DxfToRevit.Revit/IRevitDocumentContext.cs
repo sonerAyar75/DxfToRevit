@@ -3,7 +3,7 @@ using DxfToRevit.Core.Building;
 namespace DxfToRevit.Revit;
 
 /// <summary>
-/// A Revit document session that can create walls and columns. Requests are converted to
+/// A Revit document session that can create walls, columns and openings. Requests are converted to
 /// create arguments first and then written to the host document.
 /// </summary>
 /// <remarks>
@@ -24,4 +24,10 @@ public interface IRevitDocumentContext
     /// <param name="request">Column request.</param>
     /// <returns>Success with the element id (and an optional note), or a failure message.</returns>
     ColumnCreationResult CreateColumn(ColumnCreationRequest request);
+
+    /// <summary>Creates a door, window or wall opening in an existing wall.</summary>
+    /// <param name="request">Opening request.</param>
+    /// <param name="hostWallElementId">Element id of the host wall (as returned by <see cref="CreateBasicWall"/>).</param>
+    /// <returns>Success with the element id (and an optional note), or a failure message.</returns>
+    OpeningCreationResult CreateOpening(OpeningCreationRequest request, string hostWallElementId);
 }

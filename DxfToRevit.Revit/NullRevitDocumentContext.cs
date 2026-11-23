@@ -31,4 +31,13 @@ public sealed class NullRevitDocumentContext : IRevitDocumentContext
             request.Id,
             "No Revit Document is bound (NullRevitDocumentContext).");
     }
+
+    /// <inheritdoc />
+    public OpeningCreationResult CreateOpening(OpeningCreationRequest request, string hostWallElementId)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return OpeningCreationResult.Fail(
+            request.Id,
+            "No Revit Document is bound (NullRevitDocumentContext).");
+    }
 }

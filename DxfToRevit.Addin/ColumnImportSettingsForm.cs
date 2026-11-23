@@ -1,14 +1,17 @@
 using Autodesk.Revit.DB;
 using System.Windows.Forms;
 using DxfToRevit.Core.Building;
+using DxfToRevit.Core.Openings;
 using DxfToRevit.Revit;
 
 namespace DxfToRevit.Addin;
 
 /// <summary>
-/// Import settings dialog: base level, top constraint or unconnected height, and how circular and
-/// freeform columns are imported. Families can be loaded from disk directly from the dialog.
-/// Confirmed choices are stored in <see cref="ColumnImportPreferences"/> for the rest of the session.
+/// Import settings dialog: base level, top constraint or unconnected height, how circular and
+/// freeform columns are imported, and whether doors, windows and openings are imported (with the
+/// type map editor). Families can be loaded from disk directly from the dialog. Confirmed choices
+/// are stored in <see cref="ColumnImportPreferences"/> and <see cref="OpeningImportPreferences"/>
+/// for the rest of the session.
 /// </summary>
 internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
 {
@@ -91,6 +94,21 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
     private readonly Label _circularInfo = new() { AutoSize = true };
     private readonly Label _squareInfo = new() { AutoSize = true };
 
+    private readonly CheckBox _includeOpenings = new()
+    {
+        Text = "Import doors, windows and openings (blocks named door, window, opening)",
+        AutoSize = true,
+        Checked = OpeningImportPreferences.IncludeOpenings
+    };
+
+    private readonly Label _openingInfo = new() { AutoSize = true, Margin = new Padding(20, 3, 3, 3) };
+    private Button? _openingTypes;
+    private readonly bool _dxfLoaded;
+    private readonly IReadOnlyList<OpeningCodeUsage> _openingUsages;
+
+    /// <summary>Whether doors, windows and empty openings are imported.</summary>
+    public bool IncludeOpenings => _includeOpenings.Checked;
+
     /// <summary>Whether circular columns are imported at all.</summary>
     public bool IncludeCircularColumns => !_skipCircular.Checked;
     /// <summary>Whether circular columns are replaced by square columns.</summary>
@@ -117,12 +135,17 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
 
     /// <summary>Builds the dialog and fills the level and column type lists from the document.</summary>
     /// <param name="document">Project document.</param>
+    /// <param name="dxfFileName">Name of the DXF being imported; <c>null</c> when the dialog is opened on its own.</param>
+    /// <param name="openingUsages">Door, window and opening codes found in the DXF, listed in the type map editor.</param>
     /// <exception cref="System.ArgumentNullException"><paramref name="document"/> is <c>null</c>.</exception>
-    public ColumnImportSettingsForm(Document document)
+    public ColumnImportSettingsForm(
+        Document document, string? dxfFileName = null, IReadOnlyList<OpeningCodeUsage>? openingUsages = null)
     {
         ArgumentNullException.ThrowIfNull(document);
+        _dxfLoaded = dxfFileName is not null;
+        _openingUsages = openingUsages ?? Array.Empty<OpeningCodeUsage>();
 
-        Text = "DxfToRevit - Column Import Settings";
+        Text = dxfFileName is null ? "DxfToRevit - Import Settings" : $"DxfToRevit - Import Settings - {dxfFileName}";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterScreen;
         MinimizeBox = false;
@@ -134,7 +157,7 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
 
         var description = new Label
         {
-            Text = "Choose how circular columns detected in the DXF should be imported.",
+            Text = "Choose the level, how columns are imported and how doors and windows are mapped.",
             AutoSize = true,
             Margin = new Padding(0, 0, 0, 12)
         };
@@ -238,6 +261,30 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
         freeformGroup.Controls.Add(freeformLayout);
         _includeFreeform.CheckedChanged += (_, _) => UpdateEnabledState();
 
+        var openingGroup = new GroupBox
+        {
+            Text = "Doors, windows and openings",
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(10),
+            Dock = DockStyle.Top
+        };
+        var openingLayout = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown,
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            WrapContents = false
+        };
+        var openingTypes = new Button { Text = "Opening types and heights...", AutoSize = true, Margin = new Padding(20, 3, 3, 3) };
+        openingLayout.Controls.Add(_includeOpenings);
+        openingLayout.Controls.Add(openingTypes);
+        openingLayout.Controls.Add(_openingInfo);
+        openingGroup.Controls.Add(openingLayout);
+        _includeOpenings.CheckedChanged += (_, _) => UpdateEnabledState();
+        openingTypes.Click += (_, _) => EditOpeningTypes(document);
+        _openingTypes = openingTypes;
+
         var buttons = new FlowLayoutPanel
         {
             FlowDirection = FlowDirection.RightToLeft,
@@ -253,7 +300,7 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
         var layout = new TableLayoutPanel
         {
             ColumnCount = 1,
-            RowCount = 5,
+            RowCount = 6,
             AutoSize = true,
             Dock = DockStyle.Fill
         };
@@ -261,7 +308,8 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
         layout.Controls.Add(levelGroup, 0, 1);
         layout.Controls.Add(circularGroup, 0, 2);
         layout.Controls.Add(freeformGroup, 0, 3);
-        layout.Controls.Add(buttons, 0, 4);
+        layout.Controls.Add(openingGroup, 0, 4);
+        layout.Controls.Add(buttons, 0, 5);
         Controls.Add(layout);
 
         AcceptButton = ok;
@@ -288,6 +336,7 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
             UpdateEnabledState();
 
         SetInitialMode();
+        UpdateOpeningInfo();
         UpdateEnabledState();
 
         FormClosing += (_, e) =>
@@ -301,6 +350,21 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
                         "No project Level is available. Create or select a Level before importing.",
                         "DxfToRevit", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
+                }
+
+                if (IncludeOpenings)
+                {
+                    IReadOnlyList<OpeningCodeUsage> unmapped =
+                        OpeningTypeMapRows.Unmapped(OpeningImportPreferences.TypeMap, _openingUsages);
+                    if (unmapped.Count > 0 && MessageBox.Show(this,
+                            "These DXF codes have no Revit type and will not be created:\n" +
+                            OpeningTypeMapForm.DescribeUsages(unmapped) +
+                            "\n\nContinue anyway? Choose No to map them with \"Opening types and heights...\".",
+                            "DxfToRevit", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                    {
+                        e.Cancel = true;
+                        return;
+                    }
                 }
 
                 if (_useCircularFamily.Checked && SelectedCircularTypeKey is null)
@@ -328,6 +392,7 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
                 ColumnImportPreferences.FreeformAsFamily = FreeformAsFamily;
                 ColumnImportPreferences.CircularTypeKey = SelectedCircularTypeKey;
                 ColumnImportPreferences.SquareTypeKey = SelectedSquareTypeKey;
+                OpeningImportPreferences.IncludeOpenings = IncludeOpenings;
             }
         };
     }
@@ -508,10 +573,71 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
         _circularTypes.Enabled = _useCircularFamily.Checked;
         _squareTypes.Enabled = _useSquareFallback.Checked;
         _freeformAsFamily.Enabled = _includeFreeform.Checked;
+        if (_openingTypes is not null)
+            _openingTypes.Enabled = _includeOpenings.Checked;
 
         // Height is editable only when Top Constraint is Unconnected.
         _unconnectedHeight.Enabled = SelectedTopLevelName is null;
     }
+
+    /// <summary>Opens the opening type map editor and stores the result in <see cref="OpeningImportPreferences"/>.</summary>
+    private void EditOpeningTypes(Document document)
+    {
+        using var form = new OpeningTypeMapForm(
+            CollectTypeKeys(document, BuiltInCategory.OST_Doors),
+            CollectTypeKeys(document, BuiltInCategory.OST_Windows),
+            _openingUsages);
+        if (form.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        OpeningImportPreferences.TypeMap = form.TypeMap;
+        OpeningImportPreferences.DoorHeightCm = form.DoorHeightCm;
+        OpeningImportPreferences.WindowHeightCm = form.WindowHeightCm;
+        OpeningImportPreferences.WindowSillCm = form.WindowSillCm;
+        OpeningImportPreferences.EmptyOpeningHeightCm = form.EmptyOpeningHeightCm;
+        UpdateOpeningInfo();
+    }
+
+    /// <summary>
+    /// Shows what the loaded DXF contains and how many of its codes still have no Revit type, or,
+    /// without a DXF, how many codes are mapped.
+    /// </summary>
+    private void UpdateOpeningInfo()
+    {
+        if (_openingUsages.Count > 0)
+        {
+            int Count(OpeningCategory category) => _openingUsages.Where(u => u.Category == category).Sum(u => u.Count);
+            int unmapped = OpeningTypeMapRows.Unmapped(OpeningImportPreferences.TypeMap, _openingUsages).Count;
+            _openingInfo.Text =
+                $"In the DXF: {Count(OpeningCategory.Door)} door(s), {Count(OpeningCategory.Window)} window(s), " +
+                $"{Count(OpeningCategory.EmptyOpening)} empty opening(s).\n" +
+                (unmapped == 0
+                    ? "Every door and window code has a Revit type."
+                    : $"{unmapped} door/window code(s) have no Revit type yet - use the button above.");
+            _openingInfo.ForeColor = unmapped == 0 ? System.Drawing.SystemColors.ControlText : System.Drawing.Color.Firebrick;
+            return;
+        }
+
+        var entries = OpeningImportPreferences.TypeMap.Entries;
+        int doors = entries.Count(e => e.Category == OpeningCategory.Door);
+        int windows = entries.Count(e => e.Category == OpeningCategory.Window);
+        _openingInfo.Text = _dxfLoaded
+            ? "The DXF contains no door, window or opening blocks."
+            : entries.Count == 0
+                ? "No door or window types are mapped yet."
+                : $"Mapped codes: {doors} door, {windows} window.";
+    }
+
+    /// <summary>Loaded family types of a category as <c>Family::Type</c> keys, sorted by name.</summary>
+    private static IReadOnlyList<string> CollectTypeKeys(Document document, BuiltInCategory category) =>
+        new FilteredElementCollector(document)
+            .OfClass(typeof(FamilySymbol))
+            .OfCategory(category)
+            .Cast<FamilySymbol>()
+            .OrderBy(s => s.FamilyName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(s => OpeningTypeKey.Format(s.FamilyName, s.Name))
+            .ToList();
 
     /// <summary>Loads a column family (.rfa) chosen by the user and refreshes the type lists.</summary>
     private void LoadFamily(Document document, bool circular)
