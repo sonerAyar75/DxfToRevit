@@ -22,7 +22,7 @@ that does not fit is listed in the summary with its DXF coordinates.
 |------|--------|
 | Units | Millimetres (1 drawing unit = 1 mm) |
 | Space | Model space |
-| File | Save as DXF (AutoCAD 2000 format or later) |
+| File | Save as **AutoCAD 2018 DXF** (recommended: it is the newest format, also used by AutoCAD 2019 and later). AutoCAD 2000 to 2018 DXF formats are read. DWG files cannot be read directly: save them as DXF (SAVEAS). |
 | One storey per file | All elements of the file are placed on the same level |
 
 ### Walls
