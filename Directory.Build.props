@@ -16,7 +16,7 @@
     from DxfToRevit.Addin.dll, so this is the single place to change the release version.
   -->
   <PropertyGroup>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
     <Product>DxfToRevit</Product>
     <Company>DxfToRevit</Company>
     <Copyright>Copyright (c) 2026 Soner Ayar</Copyright>

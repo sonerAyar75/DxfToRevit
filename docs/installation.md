@@ -52,8 +52,8 @@ Further behaviour:
 ## Silent installation
 
 ```bat
-DxfToRevit-2.0.0-Revit2025-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /CURRENTUSER
-DxfToRevit-2.0.0-Revit2025-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS
+DxfToRevit-2.1.0-Revit2025-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /CURRENTUSER
+DxfToRevit-2.1.0-Revit2025-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS
 ```
 
 With `/SUPPRESSMSGBOXES` the questions above take their default answer: continue without Revit,
