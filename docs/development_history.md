@@ -30,6 +30,7 @@ DxfToRevit builds the Revit model from it.
 | 10 | Load the DXF first, then map its opening codes to Revit families | DXF-first import flow; the type map editor lists the codes found in the drawing | `OpeningCodeSummary`, `OpeningTypeMapRows`, `OpeningTypeMapForm` |
 | 11 | Doors came in mirrored in both directions | Door orientation conventions corrected (verified in Revit 2025) | `OpeningOrientationPlanner` |
 | 12 | The import drew elements one by one and was slow | Compute first, then write everything in one batch transaction (unit of work) | `RevitImportBatch`, `RevitChangeScope`, `RevitBatchFailureHandler` |
+| 13 | Windows came in facing a random side; double, sliding and multi-panel variants | Windows read hinge circles like doors; the circles' count and position give the leaf layout; separate window convention | `OpeningLeafLayout`, `OpeningHanding`, `OpeningOrientationConvention` |
 
 ## Classes by need (short)
 
@@ -262,6 +263,29 @@ transaction per element, which regenerates the model and redraws the view each t
   deletes elements that cause errors; `ImportDxfCommand` turns those into failures with Revit's
   reason. The import is one undo step.
 
+## Stage 13 - Window orientation and leaf layouts
+
+**Requirement.** Doors work in tests and with a real DXF; next, windows. Windows had no
+orientation at all, so Revit placed them facing a random side. Doors and windows also come in many
+variants (double, sliding, multiple, sliding window): should they be separate blocks?
+
+**Decision.** No new blocks. The variant is already chosen by `TYPE` → Revit family; the DXF only
+has to say what the family cannot know: the side and, for a single leaf, the hinge end. The user
+adds a hinge circle to the window block as in the door block.
+
+- `DxfOpeningReader` keeps every circle of the block (`OpeningMarker.HingePoints`).
+- `OpeningDefinitionRegistry`: windows are `Hinged` like doors.
+- `OpeningInterpreter.DeriveHanding` classifies the circles by wall face and by position (end zone
+  = one third of the width, `HingeEndZoneFraction`): one end → `SingleHinged` (side + hinge end),
+  both ends → `DoubleHinged` (side only), middle only → `SideOnly`, no circle → no orientation
+  and a warning (the earlier fallback to the insertion point was dropped). Circles on both faces:
+  the majority wins, with a warning.
+- `OpeningHanding` became a record with `Layout`, an optional `HingeEnd` and `SwingSide`, built
+  with `Single`, `Double` and `SideOnly`.
+- `OpeningOrientationPlanner` holds one `OpeningOrientationConvention` per category: doors keep the
+  verified convention; windows default to facing away from the swing side (exterior, sashes open
+  inwards), to be verified in Revit. The hand is only flipped for a single leaf.
+
 ---
 
 # Part 3 - Class reference by need
@@ -310,7 +334,7 @@ the generated API reference.
 | Class | Why it exists | Important members |
 |-------|---------------|-------------------|
 | `OpeningDefinition`, `OpeningDefinitionRegistry` | Kinds as data, extensible without new classes | `CreateDefault(doorH, windowH, sill, openingH)`, `Find(blockName, layer)` |
-| `OpeningMarker` | The raw marker before interpretation | `Outline`, `Center`, `HingePoint`, `Attributes` |
+| `OpeningMarker` | The raw marker before interpretation | `Outline`, `Center`, `HingePoints`, `Attributes` |
 | `OpeningRegionFilter` | Jamb lines must not create walls or gaps | `RemoveLinesInside(lines, markers, out removed)` |
 | `OpeningWallMatcher` | Each marker on exactly one wall | `TryMatch(marker, walls, out placement, issues)` |
 | `OpeningAttributeParser` | Centimetre attributes with safe defaults | `Parse(marker, issues)` |
@@ -352,7 +376,7 @@ the generated API reference.
 | `WallTypeMatchPlanner`, `ColumnTypeMatchPlanner` | Type name → family with matching size → duplicate | `Plan(...)`, `BuildUniqueName(...)` |
 | `LibraryFileSearch`, `RoundColumnFamilyLocator` | Find family files, English metric first | `FindFirst`, `Find` |
 | `FreeformColumnFamilyNaming` | One family per shape | `FamilyName(outline)` |
-| `OpeningOrientationPlanner` | Door flips for any family | `NeedsFacingFlip`, `NeedsHandFlip` |
+| `OpeningOrientationPlanner`, `OpeningOrientationConvention` | Door and window flips for any family, one convention per category | `NeedsFacingFlip`, `NeedsHandFlip`, `ConventionFor` |
 | `OpeningTypeKey` | Parse `Family::Type` keys | `TryParse`, `Format`, `Matches` |
 
 ## Writing to Revit

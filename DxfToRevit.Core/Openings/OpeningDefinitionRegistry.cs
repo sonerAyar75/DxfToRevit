@@ -36,7 +36,7 @@ public sealed class OpeningDefinitionRegistry
     }
 
     /// <summary>
-    /// The standard kinds: <c>door</c> (hinged family), <c>window</c> (family with sill) and
+    /// The standard kinds: <c>door</c> (hinged family), <c>window</c> (hinged family with sill) and
     /// <c>opening</c> (empty wall opening). Block and layer names equal the kind name.
     /// </summary>
     /// <param name="doorHeightCm">Default door height (cm).</param>
@@ -54,7 +54,7 @@ public sealed class OpeningDefinitionRegistry
                 OpeningHandingMode.Hinged, new[] { "door" }, new[] { "door" },
                 doorHeightCm, 0, usesSillHeight: false, idPrefix: "D"),
             new OpeningDefinition("window", OpeningCategory.Window, OpeningCreationMode.HostedFamily,
-                OpeningHandingMode.None, new[] { "window" }, new[] { "window" },
+                OpeningHandingMode.Hinged, new[] { "window" }, new[] { "window" },
                 windowHeightCm, windowSillCm, usesSillHeight: true, idPrefix: "W"),
             new OpeningDefinition("opening", OpeningCategory.EmptyOpening, OpeningCreationMode.WallOpening,
                 OpeningHandingMode.None, new[] { "opening" }, new[] { "opening" },

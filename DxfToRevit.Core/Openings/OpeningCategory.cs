@@ -29,11 +29,40 @@ public enum OpeningCreationMode
 /// <summary>How the swing of an opening is described by the marker block.</summary>
 public enum OpeningHandingMode
 {
-    /// <summary>No swing (windows, empty openings).</summary>
+    /// <summary>No swing (empty openings).</summary>
     None,
 
-    /// <summary>Hinged leaf: the hinge circle gives the hinge end and the swing side.</summary>
+    /// <summary>
+    /// Leaves (doors, windows): the circles of the block give the swing side and, for a single
+    /// hinged leaf, the hinge end (see <see cref="OpeningLeafLayout"/>).
+    /// </summary>
     Hinged
+}
+
+/// <summary>
+/// Leaf arrangement read from the circles of a marker block. It decides which orientation can be
+/// applied; the kind of door or window itself (double, sliding, multi-panel) comes from the Revit
+/// family mapped to the <c>TYPE</c> code.
+/// </summary>
+public enum OpeningLeafLayout
+{
+    /// <summary>
+    /// One circle near one end of the opening: a single hinged leaf. Both the swing side and the
+    /// hinge end are applied.
+    /// </summary>
+    SingleHinged,
+
+    /// <summary>
+    /// Circles near both ends: two hinged leaves (double door, double casement). Only the swing
+    /// side is applied; left/right is meaningless.
+    /// </summary>
+    DoubleHinged,
+
+    /// <summary>
+    /// Circles only near the middle: no hinge end (sliding, fixed or multi-panel). Only the side
+    /// (inside/outside) is applied.
+    /// </summary>
+    SideOnly
 }
 
 /// <summary>End of the opening, along the wall direction, on which the hinge lies.</summary>
@@ -46,7 +75,10 @@ public enum HingeEnd
     End
 }
 
-/// <summary>Wall face, relative to the wall direction (start → end), on which a door swings.</summary>
+/// <summary>
+/// Wall face, relative to the wall direction (start → end), to which a door or window leaf swings
+/// (the face on which the marker's circle lies).
+/// </summary>
 public enum SwingSide
 {
     /// <summary>The face to the left of the wall direction.</summary>

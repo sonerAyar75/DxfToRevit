@@ -26,9 +26,10 @@ internal static class OpeningTestFixtures
     /// <param name="centerY">Centre Y.</param>
     /// <param name="width">Width along X.</param>
     /// <param name="depth">Depth along Y.</param>
-    /// <param name="hinge">Hinge circle centre; <c>null</c> for no circle (the insertion point is used).</param>
+    /// <param name="hinge">One circle centre; <c>null</c> for no circle.</param>
     /// <param name="attributes">Attribute values by tag.</param>
     /// <param name="handle">Entity handle.</param>
+    /// <param name="hinges">Several circle centres; overrides <paramref name="hinge"/> when given.</param>
     public static OpeningMarker Marker(
         string kind,
         double centerX,
@@ -37,7 +38,8 @@ internal static class OpeningTestFixtures
         double depth,
         Vector2? hinge = null,
         IReadOnlyDictionary<string, string>? attributes = null,
-        string handle = "A1")
+        string handle = "A1",
+        IReadOnlyList<Vector2>? hinges = null)
     {
         OpeningDefinition definition = Registry.Find(kind, null)
                                        ?? throw new ArgumentException($"Unknown kind '{kind}'.", nameof(kind));
@@ -56,8 +58,7 @@ internal static class OpeningTestFixtures
             "0",
             definition,
             outline,
-            hinge ?? new Vector2(centerX - hw, centerY - hd),
-            hinge is not null,
+            hinges ?? (hinge is null ? Array.Empty<Vector2>() : new[] { hinge.Value }),
             attributes ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
     }
 

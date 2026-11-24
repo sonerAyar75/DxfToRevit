@@ -45,7 +45,7 @@ public sealed class OpeningCreationRequest
     /// <summary>Sill height above the level.</summary>
     public double SillHeightMm { get; }
 
-    /// <summary>Swing of hinged openings; <c>null</c> otherwise.</summary>
+    /// <summary>Orientation of doors and windows read from the marker circles; <c>null</c> when unknown or not applicable.</summary>
     public OpeningHanding? Handing { get; }
 
     /// <summary>Level placement (the base level of the import).</summary>
@@ -66,7 +66,7 @@ public sealed class OpeningCreationRequest
     /// <param name="widthMm">Width.</param>
     /// <param name="heightMm">Height.</param>
     /// <param name="sillHeightMm">Sill height.</param>
-    /// <param name="handing">Swing, for hinged openings.</param>
+    /// <param name="handing">Orientation, for doors and windows.</param>
     /// <param name="placement">Level placement; host default when <c>null</c>.</param>
     /// <param name="sourceHandle">Marker handle.</param>
     /// <exception cref="ArgumentException">The id or host wall id is empty.</exception>

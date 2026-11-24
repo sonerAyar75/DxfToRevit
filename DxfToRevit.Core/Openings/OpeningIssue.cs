@@ -39,7 +39,10 @@ public enum OpeningIssueCode
     /// <summary>The marker depth differs from the wall thickness.</summary>
     DepthMismatch,
 
-    /// <summary>A door marker has no hinge circle; the insertion point was used.</summary>
+    /// <summary>
+    /// The swing of a door or window marker is unclear: no circle (left as Revit places it), a
+    /// circle on the wall axis, or circles on both faces of the wall.
+    /// </summary>
     MissingHinge,
 
     /// <summary>A gap in a wall has no marker; it was left open.</summary>

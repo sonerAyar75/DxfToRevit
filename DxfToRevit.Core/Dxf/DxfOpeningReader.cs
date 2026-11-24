@@ -17,8 +17,8 @@ public sealed record DxfOpeningReadResult(IReadOnlyList<OpeningMarker> Markers, 
 /// <see cref="DynamicBlockNameResolver"/> — or its layer matches an <see cref="OpeningDefinition"/>.
 /// The marker geometry is the first closed 4-vertex polyline of the block, transformed to world
 /// coordinates with the reference's position, rotation, scale and mirroring, so the width of a
-/// stretched dynamic block is read from its actual geometry. The first circle of the block is the
-/// hinge; without a circle the insertion point is used.
+/// stretched dynamic block is read from its actual geometry. Every circle of the block is a hinge
+/// mark; <see cref="OpeningInterpreter"/> derives the swing side and hinge end from them.
 /// </remarks>
 public sealed class DxfOpeningReader
 {
@@ -75,10 +75,9 @@ public sealed class DxfOpeningReader
             Vector2 origin = new(insert.Block.Origin.X, insert.Block.Origin.Y);
             Vector2 ToWorld(Vector2 p) => Transform(p - origin, insert);
 
-            Circle? hinge = insert.Block.Entities.OfType<Circle>().FirstOrDefault();
-            Vector2 hingePoint = hinge is null
-                ? position
-                : ToWorld(new Vector2(hinge.Center.X, hinge.Center.Y));
+            List<Vector2> hingePoints = insert.Block.Entities.OfType<Circle>()
+                .Select(c => ToWorld(new Vector2(c.Center.X, c.Center.Y)))
+                .ToList();
 
             var attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (netDxf.Entities.Attribute attribute in insert.Attributes)
@@ -93,8 +92,7 @@ public sealed class DxfOpeningReader
                 layer,
                 definition,
                 localRectangle.Select(ToWorld).ToList(),
-                hingePoint,
-                hinge is not null,
+                hingePoints,
                 attributes));
         }
 

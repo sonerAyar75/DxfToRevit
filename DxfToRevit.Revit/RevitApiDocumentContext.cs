@@ -65,7 +65,7 @@ public sealed class RevitApiDocumentContext : IRevitDocumentContext
 
     /// <summary>Binds the context to a project document.</summary>
     /// <param name="document">Open Revit project document.</param>
-    /// <param name="orientationPlanner">Door flip conventions; the standard conventions when <c>null</c>.</param>
+    /// <param name="orientationPlanner">Door and window flip conventions; the standard conventions when <c>null</c>.</param>
     /// <exception cref="System.ArgumentNullException"><paramref name="document"/> is <c>null</c>.</exception>
     public RevitApiDocumentContext(Autodesk.Revit.DB.Document document, OpeningOrientationPlanner? orientationPlanner = null)
     {
@@ -522,7 +522,7 @@ public sealed class RevitApiDocumentContext : IRevitDocumentContext
         {
             if (_batch is not null)
             {
-                // In a batch all doors are flipped together, with two regenerations in total.
+                // In a batch all doors and windows are flipped together, with two regenerations in total.
                 _pendingHandings.Add(pending);
             }
             else
@@ -535,10 +535,10 @@ public sealed class RevitApiDocumentContext : IRevitDocumentContext
         return new OpeningCreationResult(args.RequestId, true, instance.Id.Value.ToString(), note);
     }
 
-    /// <summary>A placed door whose hinge and swing are applied later (in a batch).</summary>
+    /// <summary>A placed door or window whose hinge and swing are applied later (in a batch).</summary>
     private sealed record PendingHanding(Autodesk.Revit.DB.ElementId InstanceId, OpeningCreateArgs Args);
 
-    /// <summary>Applies the door flips deferred during the current batch; returns notes by request id.</summary>
+    /// <summary>Applies the door and window flips deferred during the current batch; returns notes by request id.</summary>
     internal IReadOnlyDictionary<string, string> ApplyPendingHandings()
     {
         IReadOnlyDictionary<string, string> notes = ApplyHandings(_pendingHandings);
@@ -548,7 +548,7 @@ public sealed class RevitApiDocumentContext : IRevitDocumentContext
 
     /// <summary>
     /// Flips each instance's facing, then its hand, when its orientation differs from the DXF
-    /// marker. The orientations are read after one regeneration per step, not per door. Returns a
+    /// marker. The orientations are read after one regeneration per step, not per instance. Returns a
     /// note (by request id) when a required flip is not allowed by the family.
     /// </summary>
     private IReadOnlyDictionary<string, string> ApplyHandings(IReadOnlyCollection<PendingHanding> items)
@@ -557,17 +557,17 @@ public sealed class RevitApiDocumentContext : IRevitDocumentContext
         if (items.Count == 0)
             return notes;
 
-        var doors = items
+        var placed = items
             .Select(p => (p.Args, Instance: _document.GetElement(p.InstanceId) as Autodesk.Revit.DB.FamilyInstance))
             .Where(d => d.Instance is { IsValidObject: true } && d.Args.Handing is not null)
             .ToList();
 
         _document.Regenerate();
         bool facingFlipped = false;
-        foreach (var (args, instance) in doors)
+        foreach (var (args, instance) in placed)
         {
             Autodesk.Revit.DB.XYZ facing = instance!.FacingOrientation;
-            if (!_orientationPlanner.NeedsFacingFlip((args.DirectionX, args.DirectionY), args.Handing!, (facing.X, facing.Y)))
+            if (!_orientationPlanner.NeedsFacingFlip(args.Category, (args.DirectionX, args.DirectionY), args.Handing!, (facing.X, facing.Y)))
                 continue;
 
             if (instance.CanFlipFacing)
@@ -584,10 +584,10 @@ public sealed class RevitApiDocumentContext : IRevitDocumentContext
         if (facingFlipped)
             _document.Regenerate();
 
-        foreach (var (args, instance) in doors)
+        foreach (var (args, instance) in placed)
         {
             Autodesk.Revit.DB.XYZ hand = instance!.HandOrientation;
-            if (!_orientationPlanner.NeedsHandFlip((args.DirectionX, args.DirectionY), args.Handing!, (hand.X, hand.Y)))
+            if (!_orientationPlanner.NeedsHandFlip(args.Category, (args.DirectionX, args.DirectionY), args.Handing!, (hand.X, hand.Y)))
                 continue;
 
             if (instance.CanFlipHand)
