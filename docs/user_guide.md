@@ -138,20 +138,43 @@ If you switch the circle position with **visibility states** of a dynamic block 
 1. **DxfToRevit** tab → **Import DXF** → choose the DXF file. The drawing is analysed; nothing
    is written yet.
 2. In the settings dialog choose:
+   - **Import**: which categories to import (*Walls*, *Columns*, *Doors*, *Windows*, *Empty
+     openings*, each with the number found in the DXF) and whether to **skip elements that already
+     exist in the model** (see *Importing an updated drawing* below);
    - **Base Level** and **Top Constraint** (a level, or *Unconnected* with an **Unconnected
      Height** in mm);
    - **Circular columns**: a round column family (*Automatic* finds or loads one), round solids,
      square columns, or do not import;
    - **Other columns**: import freeform columns, and whether to build them as column families
      bound to the levels;
-   - **Doors, windows and openings**: import them or not. The group shows how many the DXF
-     contains and how many type codes still have no Revit type.
+   - **Doors, windows and openings**: shows how many the DXF contains and how many type codes
+     still have no Revit type.
 3. Click **Opening types and heights...** to assign a Revit type to every code (see below) and to
    set the default heights.
 4. Click **Continue**. All elements are created in one step; the summary appears at the end.
 
 The choices are remembered until Revit is closed. **Column Settings** on the ribbon opens the
 same settings without importing.
+
+### Importing an updated drawing
+
+When doors, windows or other elements are added to a drawing that was already imported, import
+the whole DXF again with **Skip elements that already exist in the model** checked: only the new
+elements are created, and the summary lists how many were already in the model.
+
+| Element | Counts as already in the model when… |
+|---------|--------------------------------------|
+| Wall | a wall of the same thickness on the same level covers its centreline (within 10 mm) |
+| Column | a column on the same level stands at the same place (within 10 mm) |
+| Door, window, empty opening | an element of the same kind on the same level stands at the same place (within 10 mm) |
+
+- New doors and windows are placed in the walls that are already in the model, so they can be
+  imported without importing the walls again. Uncheck *Walls* to import only doors and windows.
+- A wall that was lengthened, moved or changed in thickness in the drawing does not match: it is
+  created again and Revit reports it as overlapping the old one. Delete the old wall, or undo and
+  correct the drawing.
+- Elements deleted from the drawing are not deleted from the model.
+- Without the option, every chosen element is created again; Revit then reports the overlaps.
 
 ### Opening types and heights
 
@@ -208,6 +231,7 @@ At the end a summary shows what was created and what needs attention:
 | Section | Meaning | What to do |
 |---------|---------|------------|
 | Walls / Columns / Openings created | Created count / requested count | |
+| Already in the model, not created again | Elements skipped because they already exist | Nothing; uncheck the option to create them anyway |
 | **Elements overlap existing elements** (title) and *Overlaps* | Revit found walls on top of walls or identical elements in the same place, usually because the drawing was imported twice | Undo (**Ctrl+Z**) removes the whole import in one step |
 | Ambiguous face pairs skipped | A wall face could pair with two lines | Clean up the lines around the given coordinates |
 | Walls / Columns / Openings failed | Elements Revit could not create, with the reason | Check the type, level or geometry named in the message |

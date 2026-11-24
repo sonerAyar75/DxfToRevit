@@ -33,6 +33,7 @@ DxfToRevit builds the Revit model from it.
 | 13 | Windows came in facing a random side; double, sliding and multi-panel variants | Windows read hinge circles like doors; the circles' count and position give the leaf layout; separate window convention | `OpeningLeafLayout`, `OpeningHanding`, `OpeningOrientationConvention` |
 | 14 | Circle count duplicated what the `TYPE` family already says | One circle per door or window: swing side and hinge end only | `OpeningInterpreter`, `OpeningHanding` |
 | 15 | Importing the same drawing twice gave no message | Revit's overlap warnings are collected and shown first in the summary | `RevitWarningLog`, `RevitBatchResult` |
+| 16 | Adding elements to an imported drawing meant importing everything again | Category check boxes; elements already in the model are skipped and host the new doors and windows | `ExistingElementMatcher`, `RevitExistingElementReader`, `ImportSelectionPreferences` |
 
 ## Classes by need (short)
 
@@ -333,6 +334,29 @@ dialog per element.
   that one Undo removes the whole import, and other Revit warnings are listed at the end.
 - A check before writing (asking whether to continue) is possible later; since the import is one
   undo step, the warning after the import was enough for now.
+
+## Stage 16 - Choosing what to import, skipping what exists
+
+**Requirement.** When doors, windows or other elements are added to a drawing that was already
+imported, the user should not have to import the whole drawing again (which duplicated every
+element) and should be able to choose what is imported.
+
+**Decision.** Category check boxes instead of a list of single elements, and a geometric check
+against the model instead of marking imported elements, so that elements drawn or changed by hand
+in Revit are recognised too.
+
+- The settings dialog has an **Import** group: *Walls*, *Columns*, *Doors*, *Windows*, *Empty
+  openings* with their counts in the DXF (`ImportCounts`), and *Skip elements that already exist
+  in the model* (`ImportSelectionPreferences`, remembered for the session).
+- `RevitExistingElementReader` reads the walls, columns, doors, windows and wall openings of the
+  model into an API-free `ExistingElements` snapshot; `ExistingElementMatcher` (tested) finds the
+  element a request would duplicate: a wall of the same thickness on the same level covering the
+  centreline, or a column, door, window or opening of the same kind at the same place (10 mm).
+- Doors and windows whose wall is not created now are hosted by the matching existing wall
+  (`MapHostWallIds` merges created and existing walls), so they can be imported alone.
+- The summary lists the elements that were already in the model (`SkippedCounts`).
+- Not done on purpose: elements deleted from the drawing are not deleted from the model, and a wall
+  changed in the drawing is created again (Revit reports the overlap).
 
 ---
 

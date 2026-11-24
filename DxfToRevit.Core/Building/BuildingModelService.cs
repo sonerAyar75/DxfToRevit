@@ -78,7 +78,7 @@ public sealed class BuildingModelService
             if (!hostWallIds.TryGetValue(request.HostWallRequestId, out string? hostWallId))
             {
                 results.Add(OpeningCreationResult.Fail(request.Id,
-                    $"Host wall {request.HostWallRequestId} was not created, so the opening has no host."));
+                    $"Host wall {request.HostWallRequestId} was not created and is not in the model, so the opening has no host."));
                 continue;
             }
 
