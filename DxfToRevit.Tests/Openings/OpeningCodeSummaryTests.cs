@@ -55,11 +55,20 @@ public sealed class OpeningCodeSummaryTests
         IReadOnlyList<OpeningTypeMapRow> rows = OpeningTypeMapRows.Build(map, OpeningCodeSummary.Build(Openings()));
 
         Assert.Equal(
-            new[] { "Door|2|F::Two|2", "Door|10||1", "Window|A||1", "Door|*|F::Default|0", "Window|Z|W::Zed|0" },
+            new[] { "Door|2|F::Two|2", "Door|10||1", "Window|A||1", "Door|*|F::Default|0", "Window|Z|W::Zed|0", "Window|*||0" },
             rows.Select(r => $"{r.Category}|{r.Code}|{r.TypeKey}|{r.CountInDxf}"));
         Assert.True(rows[0].FromDxf);
         Assert.False(rows[3].FromDxf);
         Assert.Equal("900x2100", rows[0].Sizes);
+    }
+
+    /// <summary>Without a map, the editor still offers an empty <c>*</c> row for doors and windows.</summary>
+    [Fact]
+    public void Rows_EmptyMap_OfferDefaultRowsForDoorsAndWindows()
+    {
+        IReadOnlyList<OpeningTypeMapRow> rows = OpeningTypeMapRows.Build(OpeningTypeMap.Empty, Array.Empty<OpeningCodeUsage>());
+
+        Assert.Equal(new[] { "Door|*|", "Window|*|" }, rows.Select(r => $"{r.Category}|{r.Code}|{r.TypeKey}"));
     }
 
     /// <summary>A code is unmapped only when neither its own row nor the <c>*</c> row of its category gives a type.</summary>

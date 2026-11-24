@@ -23,7 +23,8 @@ public static class OpeningTypeMapRows
 {
     /// <summary>
     /// One row per door/window code found in the DXF (with its mapped type, if any), followed by
-    /// the map entries whose codes are not in the DXF (for example <c>*</c>), in map order.
+    /// the map entries whose codes are not in the DXF (for example <c>*</c>), in map order, and an
+    /// empty <c>*</c> row for doors and windows when the map has none (the editor cannot add rows).
     /// </summary>
     /// <param name="map">Current type map.</param>
     /// <param name="usages">Codes found in the DXF; empty when no DXF is loaded.</param>
@@ -48,6 +49,13 @@ public static class OpeningTypeMapRows
                                        string.Equals(r.Code, entry.Code, StringComparison.OrdinalIgnoreCase));
             if (!shown)
                 rows.Add(new OpeningTypeMapRow(entry.Category, entry.Code, entry.TypeKey, 0, string.Empty));
+        }
+
+        // The editor cannot add rows, so the * row of each category is always offered.
+        foreach (OpeningCategory category in new[] { OpeningCategory.Door, OpeningCategory.Window })
+        {
+            if (!rows.Any(r => r.Category == category && r.Code == OpeningTypeMap.DefaultCode))
+                rows.Add(new OpeningTypeMapRow(category, OpeningTypeMap.DefaultCode, null, 0, string.Empty));
         }
 
         return rows;

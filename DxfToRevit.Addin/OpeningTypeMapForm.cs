@@ -31,7 +31,7 @@ internal sealed class OpeningTypeMapForm : Form
     {
         Width = 820,
         Height = 300,
-        AllowUserToAddRows = true,
+        AllowUserToAddRows = false,
         AllowUserToDeleteRows = true,
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
         SelectionMode = DataGridViewSelectionMode.CellSelect,
@@ -120,8 +120,8 @@ internal sealed class OpeningTypeMapForm : Form
         _grid.CellValueChanged += (_, _) => _grid.Invalidate(); // a changed * row changes the hints
         _grid.UserDeletingRow += (_, e) =>
         {
-            // DXF rows stay in the list; clear their type instead.
-            if (e.Row?.Tag is OpeningTypeMapRow { FromDxf: true })
+            // DXF rows and * rows stay in the list; clear their type instead.
+            if (e.Row?.Tag is OpeningTypeMapRow r && (r.FromDxf || r.Code == OpeningTypeMap.DefaultCode))
             {
                 e.Row.Cells[TypeColumn].Value = string.Empty;
                 e.Cancel = true;
@@ -227,14 +227,11 @@ internal sealed class OpeningTypeMapForm : Form
 
             DataGridViewRow gridRow = _grid.Rows[index];
             gridRow.Tag = row;
-            if (row.FromDxf)
-            {
-                // Category and code come from the drawing.
-                gridRow.Cells[CategoryColumn].ReadOnly = true;
-                gridRow.Cells[CodeColumn].ReadOnly = true;
-                gridRow.Cells[CategoryColumn].Style.BackColor = SystemColors.Control;
-                gridRow.Cells[CodeColumn].Style.BackColor = SystemColors.Control;
-            }
+            // The rows are fixed (DXF codes, * rows, rows of a loaded map): only the Revit type is edited.
+            gridRow.Cells[CategoryColumn].ReadOnly = true;
+            gridRow.Cells[CodeColumn].ReadOnly = true;
+            gridRow.Cells[CategoryColumn].Style.BackColor = SystemColors.Control;
+            gridRow.Cells[CodeColumn].Style.BackColor = SystemColors.Control;
 
             if (row.Code.Length == 0)
             {
