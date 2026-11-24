@@ -68,46 +68,16 @@ public sealed class OpeningPlacement
 }
 
 /// <summary>
-/// Orientation of a door or window, relative to the host wall direction, as read from the circles
-/// of its marker. Create it with <see cref="Single"/>, <see cref="Double"/> or <see cref="SideOnly"/>.
+/// Orientation of a door or window, relative to the host wall direction, as read from the one
+/// circle of its marker. What the orientation means for a double, sliding or multi-panel leaf is
+/// up to the Revit family mapped to the <c>TYPE</c> code.
 /// </summary>
-public sealed record OpeningHanding
-{
-    /// <summary>Leaf arrangement; decides whether <see cref="HingeEnd"/> is known.</summary>
-    public OpeningLeafLayout Layout { get; }
-
-    /// <summary>
-    /// End of the opening on which the hinge lies; only for <see cref="OpeningLeafLayout.SingleHinged"/>,
-    /// <c>null</c> otherwise (no left/right to apply).
-    /// </summary>
-    public HingeEnd? HingeEnd { get; }
-
-    /// <summary>Wall face to which the leaves swing (the face holding the circles).</summary>
-    public SwingSide SwingSide { get; }
-
-    private OpeningHanding(OpeningLeafLayout layout, HingeEnd? hingeEnd, SwingSide swingSide)
-    {
-        Layout = layout;
-        HingeEnd = hingeEnd;
-        SwingSide = swingSide;
-    }
-
-    /// <summary>A single hinged leaf: swing side and hinge end.</summary>
-    /// <param name="hingeEnd">End holding the hinge.</param>
-    /// <param name="swingSide">Face the leaf swings to.</param>
-    public static OpeningHanding Single(HingeEnd hingeEnd, SwingSide swingSide) =>
-        new(OpeningLeafLayout.SingleHinged, hingeEnd, swingSide);
-
-    /// <summary>Two hinged leaves: swing side only.</summary>
-    /// <param name="swingSide">Face the leaves swing to.</param>
-    public static OpeningHanding Double(SwingSide swingSide) =>
-        new(OpeningLeafLayout.DoubleHinged, null, swingSide);
-
-    /// <summary>No hinge end (sliding, fixed, multi-panel): side only.</summary>
-    /// <param name="side">Face marked by the circle.</param>
-    public static OpeningHanding SideOnly(SwingSide side) =>
-        new(OpeningLeafLayout.SideOnly, null, side);
-}
+/// <param name="HingeEnd">
+/// End of the opening on which the circle lies; <c>null</c> when the circle is in the middle of the
+/// opening (left/right is then left as Revit places it).
+/// </param>
+/// <param name="SwingSide">Wall face to which the leaf swings (the face holding the circle).</param>
+public sealed record OpeningHanding(HingeEnd? HingeEnd, SwingSide SwingSide);
 
 /// <summary>
 /// An interpreted opening, ready to be turned into a creation request: its kind, marker, place on

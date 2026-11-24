@@ -31,6 +31,7 @@ DxfToRevit builds the Revit model from it.
 | 11 | Doors came in mirrored in both directions | Door orientation conventions corrected (verified in Revit 2025) | `OpeningOrientationPlanner` |
 | 12 | The import drew elements one by one and was slow | Compute first, then write everything in one batch transaction (unit of work) | `RevitImportBatch`, `RevitChangeScope`, `RevitBatchFailureHandler` |
 | 13 | Windows came in facing a random side; double, sliding and multi-panel variants | Windows read hinge circles like doors; the circles' count and position give the leaf layout; separate window convention | `OpeningLeafLayout`, `OpeningHanding`, `OpeningOrientationConvention` |
+| 14 | Circle count duplicated what the `TYPE` family already says | One circle per door or window: swing side and hinge end only | `OpeningInterpreter`, `OpeningHanding` |
 
 ## Classes by need (short)
 
@@ -292,6 +293,24 @@ adds a hinge circle to the window block as in the door block.
   parse the dynamic block parameters, and the visible circles already carry the same information.
 - Revit test with the corrected block: every window opened to the wrong side, so
   `StandardWindow` was changed to facing towards the swing side, the same as doors.
+
+## Stage 14 - One circle per door or window
+
+**Requirement.** Blocks carry a `TYPE` code so that the drawing groups its doors and windows into
+types, and every type is mapped to a Revit family (door type 1 → family A, door type 2 →
+family B). The family already knows whether it is single, double or sliding, so reading the leaf
+layout from the number and position of circles duplicated that information.
+
+**Decision.** One circle per door or window, only for what the family cannot know.
+
+- `OpeningInterpreter.DeriveHanding` expects exactly one visible circle: its wall face is the swing
+  side, the half of the opening it lies in is the hinge end. A circle in the middle gives the side
+  only; no circle, more than one, or a circle on the wall axis gives no orientation. Each case is a
+  `MissingHinge` warning.
+- `OpeningLeafLayout` and `OpeningInterpreter.HingeEndZoneFraction` were removed; `OpeningHanding`
+  became `OpeningHanding(HingeEnd?, SwingSide)`.
+- For a symmetric double or sliding family the hand flip only mirrors it, which does no harm; for an
+  asymmetric family it chooses the side, as wanted.
 
 ---
 

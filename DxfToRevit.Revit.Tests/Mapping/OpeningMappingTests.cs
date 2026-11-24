@@ -62,7 +62,7 @@ public sealed class OpeningMappingTests
         var planner = new OpeningOrientationPlanner();
 
         bool flip = planner.NeedsFacingFlip(
-            OpeningCategory.Door, (1, 0), OpeningHanding.Single(HingeEnd.Start, side), (fx, fy));
+            OpeningCategory.Door, (1, 0), new OpeningHanding(HingeEnd.Start, side), (fx, fy));
 
         Assert.Equal(expected, flip);
     }
@@ -71,7 +71,7 @@ public sealed class OpeningMappingTests
     public void NeedsFacingFlip_FacingAwayFromSwingConvention_IsInverted()
     {
         var planner = new OpeningOrientationPlanner { Door = new OpeningOrientationConvention(false, true) };
-        OpeningHanding handing = OpeningHanding.Single(HingeEnd.Start, SwingSide.Left);
+        OpeningHanding handing = new OpeningHanding(HingeEnd.Start, SwingSide.Left);
 
         Assert.True(planner.NeedsFacingFlip(OpeningCategory.Door, (1, 0), handing, (0, 1)));
         Assert.False(planner.NeedsFacingFlip(OpeningCategory.Door, (1, 0), handing, (0, -1)));
@@ -82,7 +82,7 @@ public sealed class OpeningMappingTests
     {
         var planner = new OpeningOrientationPlanner();
         // Sash swings to the left (+Y) face: the window facing must point to +Y (verified in Revit 2025).
-        OpeningHanding handing = OpeningHanding.Single(HingeEnd.Start, SwingSide.Left);
+        OpeningHanding handing = new OpeningHanding(HingeEnd.Start, SwingSide.Left);
 
         Assert.False(planner.NeedsFacingFlip(OpeningCategory.Window, (1, 0), handing, (0, 1)));
         Assert.True(planner.NeedsFacingFlip(OpeningCategory.Window, (1, 0), handing, (0, -1)));
@@ -109,7 +109,7 @@ public sealed class OpeningMappingTests
         var planner = new OpeningOrientationPlanner();
 
         bool flip = planner.NeedsHandFlip(
-            OpeningCategory.Door, (1, 0), OpeningHanding.Single(end, SwingSide.Left), (hx, hy));
+            OpeningCategory.Door, (1, 0), new OpeningHanding(end, SwingSide.Left), (hx, hy));
 
         Assert.Equal(expected, flip);
     }
@@ -118,7 +118,7 @@ public sealed class OpeningMappingTests
     public void NeedsHandFlip_RotatedWall_UsesWallDirection()
     {
         var planner = new OpeningOrientationPlanner();
-        OpeningHanding handing = OpeningHanding.Single(HingeEnd.End, SwingSide.Left);
+        OpeningHanding handing = new OpeningHanding(HingeEnd.End, SwingSide.Left);
 
         // Wall along +Y, hinge at the end: the hand should point to +Y.
         Assert.False(planner.NeedsHandFlip(OpeningCategory.Door, (0, 1), handing, (0, 1)));
@@ -132,8 +132,7 @@ public sealed class OpeningMappingTests
     {
         var planner = new OpeningOrientationPlanner();
 
-        Assert.False(planner.NeedsHandFlip(category, (1, 0), OpeningHanding.Double(SwingSide.Left), (-1, 0)));
-        Assert.False(planner.NeedsHandFlip(category, (1, 0), OpeningHanding.SideOnly(SwingSide.Right), (1, 0)));
+        Assert.False(planner.NeedsHandFlip(category, (1, 0), new OpeningHanding(null, SwingSide.Left), (-1, 0)));
     }
 
     [Theory]

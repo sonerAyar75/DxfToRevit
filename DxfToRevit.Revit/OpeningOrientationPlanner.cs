@@ -37,8 +37,7 @@ public sealed record OpeningOrientationConvention(bool FacingPointsToSwingSide, 
 /// Doors and windows have their own <see cref="OpeningOrientationConvention"/> (<see cref="Door"/>,
 /// <see cref="Window"/>), configurable in case a family library uses other conventions. Decide the
 /// facing first, flip it, then decide the hand with the orientation read after the facing flip.
-/// The hand is only decided for a single hinged leaf; double leaves and side-only markers have no
-/// hinge end.
+/// The hand is only decided when the marker gives a hinge end (not for a circle in the middle).
 /// </remarks>
 public sealed class OpeningOrientationPlanner
 {

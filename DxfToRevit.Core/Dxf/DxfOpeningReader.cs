@@ -17,9 +17,10 @@ public sealed record DxfOpeningReadResult(IReadOnlyList<OpeningMarker> Markers, 
 /// <see cref="DynamicBlockNameResolver"/> — or its layer matches an <see cref="OpeningDefinition"/>.
 /// The marker geometry is the first closed 4-vertex polyline of the block, transformed to world
 /// coordinates with the reference's position, rotation, scale and mirroring, so the width of a
-/// stretched dynamic block is read from its actual geometry. Every visible circle of the block is a
-/// hinge mark; circles hidden by a visibility state are ignored, so one block can offer several hinge
-/// layouts as named visibility states. <see cref="OpeningInterpreter"/> derives the swing side and hinge end from them.
+/// stretched dynamic block is read from its actual geometry. The visible circles of the block are
+/// hinge marks; circles hidden by a visibility state are ignored, so a block may switch the circle
+/// position with named visibility states. <see cref="OpeningInterpreter"/> derives the swing side
+/// and hinge end from the circle.
 /// </remarks>
 public sealed class DxfOpeningReader
 {

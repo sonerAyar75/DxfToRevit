@@ -33,36 +33,11 @@ public enum OpeningHandingMode
     None,
 
     /// <summary>
-    /// Leaves (doors, windows): the circles of the block give the swing side and, for a single
-    /// hinged leaf, the hinge end (see <see cref="OpeningLeafLayout"/>).
+    /// Leaves (doors, windows): the one circle of the block gives the swing side and the hinge end.
+    /// The kind of door or window (single, double, sliding, multi-panel) comes from the Revit family
+    /// mapped to the <c>TYPE</c> code, not from the block.
     /// </summary>
     Hinged
-}
-
-/// <summary>
-/// Leaf arrangement read from the circles of a marker block. It decides which orientation can be
-/// applied; the kind of door or window itself (double, sliding, multi-panel) comes from the Revit
-/// family mapped to the <c>TYPE</c> code.
-/// </summary>
-public enum OpeningLeafLayout
-{
-    /// <summary>
-    /// One circle near one end of the opening: a single hinged leaf. Both the swing side and the
-    /// hinge end are applied.
-    /// </summary>
-    SingleHinged,
-
-    /// <summary>
-    /// Circles near both ends: two hinged leaves (double door, double casement). Only the swing
-    /// side is applied; left/right is meaningless.
-    /// </summary>
-    DoubleHinged,
-
-    /// <summary>
-    /// Circles only near the middle: no hinge end (sliding, fixed or multi-panel). Only the side
-    /// (inside/outside) is applied.
-    /// </summary>
-    SideOnly
 }
 
 /// <summary>End of the opening, along the wall direction, on which the hinge lies.</summary>

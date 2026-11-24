@@ -74,76 +74,52 @@ public sealed class OpeningInterpreter
     }
 
     /// <summary>
-    /// Part of the opening width, at each end, in which a circle counts as a hinge at that end
-    /// (default one third). A circle between the two end zones marks a side only.
-    /// </summary>
-    public double HingeEndZoneFraction { get; init; } = 1.0 / 3.0;
-
-    /// <summary>
-    /// Derives the orientation from the circles of the marker:
-    /// <list type="bullet">
-    /// <item>the swing side is the wall face on which the circles lie;</item>
-    /// <item>circles near both ends → <see cref="OpeningLeafLayout.DoubleHinged"/> (side only);</item>
-    /// <item>circles near one end only → <see cref="OpeningLeafLayout.SingleHinged"/> with that hinge end;</item>
-    /// <item>circles only in the middle → <see cref="OpeningLeafLayout.SideOnly"/>.</item>
-    /// </list>
-    /// Returns <c>null</c> (with a warning) when the block has no circle.
+    /// Derives the orientation from the one circle of the marker: the wall face it lies on is the
+    /// swing side and the half of the opening it lies in is the hinge end. The kind of leaf (double,
+    /// sliding, multi-panel) is not read from the block; it comes from the family mapped to the
+    /// <c>TYPE</c> code. Returns <c>null</c> (with a warning) when the block has no circle or more
+    /// than one; a circle on the wall axis or in the middle of the opening leaves that part as
+    /// Revit places it, with a warning.
     /// </summary>
     private OpeningHanding? DeriveHanding(
         OpeningMarker marker, OpeningPlacement placement, WallSolid2D wall, ICollection<OpeningIssue> issues)
     {
         string name = marker.Definition.Name;
-        if (!marker.HasHingeCircle)
+        if (marker.HingePoints.Count != 1)
         {
+            string reason = marker.HingePoints.Count == 0
+                ? "no circle in the block"
+                : $"{marker.HingePoints.Count} visible circles in the block, one is expected";
             issues.Add(OpeningIssue.Warning(OpeningIssueCode.MissingHinge, marker.Handle, marker.Center,
-                $"{name}: no circle in the block; the orientation is left as Revit places it."));
+                $"{name}: {reason}; the orientation is left as Revit places it."));
             return null;
         }
 
         Vector2 u = placement.WallDirection;
         Vector2 n = new(-u.Y, u.X);
-        double zone = placement.WidthMm * HingeEndZoneFraction;
-        int left = 0, right = 0;
-        bool atStart = false, atEnd = false;
+        Vector2 d = marker.HingePoints[0] - wall.CenterLine.Start;
+        double s = Vector2.DotProduct(d, u);
+        double t = Vector2.DotProduct(d, n);
+        double tolerance = _matcher.ToleranceMm;
 
-        foreach (Vector2 hinge in marker.HingePoints)
-        {
-            Vector2 d = hinge - wall.CenterLine.Start;
-            double s = Vector2.DotProduct(d, u);
-            double t = Vector2.DotProduct(d, n);
-
-            if (t >= _matcher.ToleranceMm)
-                left++;
-            else if (t <= -_matcher.ToleranceMm)
-                right++;
-
-            if (s <= placement.StartOffsetMm + zone)
-                atStart = true;
-            else if (s >= placement.EndOffsetMm - zone)
-                atEnd = true;
-        }
-
-        if (left == 0 && right == 0)
+        if (Math.Abs(t) < tolerance)
         {
             issues.Add(OpeningIssue.Warning(OpeningIssueCode.MissingHinge, marker.Handle, marker.Center,
-                $"{name}: the circle lies on the wall axis, so the swing side is unknown; the left side is assumed."));
+                $"{name}: the circle lies on the wall axis, so the swing side is unknown; the orientation is left as Revit places it."));
+            return null;
         }
-        else if (left > 0 && right > 0)
+
+        SwingSide side = t > 0 ? SwingSide.Left : SwingSide.Right;
+        double middle = (placement.StartOffsetMm + placement.EndOffsetMm) / 2;
+
+        if (Math.Abs(s - middle) < tolerance)
         {
             issues.Add(OpeningIssue.Warning(OpeningIssueCode.MissingHinge, marker.Handle, marker.Center,
-                $"{name}: circles lie on both faces of the wall; the face with more circles is used " +
-                "(the left face on a tie)."));
+                $"{name}: the circle lies in the middle of the opening, so the hinge end is unknown; only the swing side is applied."));
+            return new OpeningHanding(null, side);
         }
 
-        SwingSide side = right > left ? SwingSide.Right : SwingSide.Left;
-
-        if (atStart && atEnd)
-            return OpeningHanding.Double(side);
-        if (atStart)
-            return OpeningHanding.Single(HingeEnd.Start, side);
-        if (atEnd)
-            return OpeningHanding.Single(HingeEnd.End, side);
-        return OpeningHanding.SideOnly(side);
+        return new OpeningHanding(s < middle ? HingeEnd.Start : HingeEnd.End, side);
     }
 
     /// <summary>Reports openings that overlap another opening on the same wall; returns their markers.</summary>

@@ -27,9 +27,9 @@ public sealed class OpeningMarker
     public Vector2 Center { get; }
 
     /// <summary>
-    /// Centres of the circles of the block in millimetres (world coordinates), in block order. A
-    /// circle marks a hinge: its side of the wall is the swing side and its position along the
-    /// opening gives the hinge end (see <see cref="OpeningLeafLayout"/>).
+    /// Centres of the visible circles of the block in millimetres (world coordinates), in block
+    /// order. A door or window block should have exactly one: its side of the wall is the swing
+    /// side and the half of the opening it lies in gives the hinge end.
     /// </summary>
     public IReadOnlyList<Vector2> HingePoints { get; }
 

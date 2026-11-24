@@ -119,9 +119,7 @@ public sealed class OpeningInterpretationTests
         OpeningModel opening = Assert.Single(result.Openings);
         Assert.Equal("D001", opening.Id);
         Assert.NotNull(opening.Handing);
-        Assert.Equal(OpeningLeafLayout.SingleHinged, opening.Handing!.Layout);
-        Assert.Equal(end, opening.Handing.HingeEnd);
-        Assert.Equal(side, opening.Handing.SwingSide);
+        Assert.Equal(new OpeningHanding(end, side), opening.Handing);
         Assert.DoesNotContain(result.Issues, i => i.Code == OpeningIssueCode.MissingHinge);
         Assert.DoesNotContain(result.Issues, i => i.Severity == OpeningIssueSeverity.Error);
     }
@@ -140,9 +138,9 @@ public sealed class OpeningInterpretationTests
         Assert.Contains(result.Issues, i => i.Code == OpeningIssueCode.MissingHinge);
     }
 
-    /// <summary>A window hinge circle gives the same single-leaf orientation as a door's.</summary>
+    /// <summary>A window hinge circle gives the same orientation as a door's.</summary>
     [Fact]
-    public void Interpret_WindowHinge_GivesSingleHandingFromCircle()
+    public void Interpret_WindowHinge_GivesHandingFromCircle()
     {
         var walls = new[] { HorizontalWall() };
         // Window 1200 wide from x = 400 to 1600; circle near the end, on the right (-Y) face.
@@ -153,31 +151,31 @@ public sealed class OpeningInterpretationTests
 
         OpeningModel opening = Assert.Single(result.Openings);
         Assert.Equal("W001", opening.Id);
-        Assert.Equal(OpeningHanding.Single(HingeEnd.End, SwingSide.Right), opening.Handing);
+        Assert.Equal(new OpeningHanding(HingeEnd.End, SwingSide.Right), opening.Handing);
     }
 
-    /// <summary>Circles near both ends mark a double leaf: swing side only, no hinge end.</summary>
+    /// <summary>
+    /// The hinge end is the half of the opening holding the circle, wherever it lies in that half;
+    /// the variant (double, sliding) comes from the Revit family, not from the block.
+    /// </summary>
     [Theory]
-    [InlineData("door")]
-    [InlineData("window")]
-    public void Interpret_CirclesAtBothEnds_GiveDoubleLeaf(string kind)
+    [InlineData(950, HingeEnd.Start)]
+    [InlineData(1050, HingeEnd.End)]
+    public void Interpret_CircleNearMiddle_UsesHalfOfOpening(double hingeX, HingeEnd end)
     {
         var walls = new[] { HorizontalWall() };
-        var marker = Marker(kind, 1000, 0, 1400, 200,
-            hinges: new[] { new Vector2(350, 90), new Vector2(1650, 90) },
-            attributes: Attributes(("TYPE", "2"), ("HEIGHT", "210"), ("SILL_HEIGHT", "0")));
+        var marker = Marker("window", 1000, 0, 1800, 200, hinge: new Vector2(hingeX, 90),
+            attributes: Attributes(("TYPE", "3"), ("HEIGHT", "150"), ("SILL_HEIGHT", "90")));
 
         OpeningInterpretation result = new OpeningInterpreter().Interpret(new[] { marker }, walls);
 
-        OpeningModel opening = Assert.Single(result.Openings);
-        Assert.Equal(OpeningLeafLayout.DoubleHinged, opening.Handing!.Layout);
-        Assert.Null(opening.Handing.HingeEnd);
-        Assert.Equal(SwingSide.Left, opening.Handing.SwingSide);
+        Assert.Equal(new OpeningHanding(end, SwingSide.Left), Assert.Single(result.Openings).Handing);
+        Assert.DoesNotContain(result.Issues, i => i.Code == OpeningIssueCode.MissingHinge);
     }
 
-    /// <summary>A circle in the middle (sliding, fixed, multi-panel) gives the side only.</summary>
+    /// <summary>A circle exactly in the middle gives the swing side only, with a warning.</summary>
     [Fact]
-    public void Interpret_CircleInMiddle_GivesSideOnly()
+    public void Interpret_CircleInMiddle_GivesSideOnlyAndWarns()
     {
         var walls = new[] { HorizontalWall() };
         var marker = Marker("window", 1000, 0, 1800, 200, hinge: new Vector2(1000, -90),
@@ -185,37 +183,37 @@ public sealed class OpeningInterpretationTests
 
         OpeningInterpretation result = new OpeningInterpreter().Interpret(new[] { marker }, walls);
 
-        OpeningModel opening = Assert.Single(result.Openings);
-        Assert.Equal(OpeningHanding.SideOnly(SwingSide.Right), opening.Handing);
+        Assert.Equal(new OpeningHanding(null, SwingSide.Right), Assert.Single(result.Openings).Handing);
+        Assert.Contains(result.Issues, i => i.Code == OpeningIssueCode.MissingHinge && i.Severity == OpeningIssueSeverity.Warning);
     }
 
-    /// <summary>Circles near one end plus middle circles still give a single leaf at that end.</summary>
+    /// <summary>More than one visible circle is ambiguous: no orientation, with a warning.</summary>
     [Fact]
-    public void Interpret_CircleAtOneEndAndMiddle_GivesSingleLeaf()
-    {
-        var walls = new[] { HorizontalWall() };
-        var marker = Marker("window", 1000, 0, 1800, 200,
-            hinges: new[] { new Vector2(1000, 90), new Vector2(150, 90) },
-            attributes: Attributes(("TYPE", "4"), ("HEIGHT", "150"), ("SILL_HEIGHT", "90")));
-
-        OpeningInterpretation result = new OpeningInterpreter().Interpret(new[] { marker }, walls);
-
-        Assert.Equal(OpeningHanding.Single(HingeEnd.Start, SwingSide.Left), Assert.Single(result.Openings).Handing);
-    }
-
-    /// <summary>Circles on both wall faces: the face with more circles wins, with a warning.</summary>
-    [Fact]
-    public void Interpret_CirclesOnBothFaces_UsesMajorityAndWarns()
+    public void Interpret_SeveralCircles_LeavesOrientationAndWarns()
     {
         var walls = new[] { HorizontalWall() };
         var marker = Marker("door", 1000, 0, 1400, 200,
-            hinges: new[] { new Vector2(350, -90), new Vector2(1650, -90), new Vector2(1650, 90) },
+            hinges: new[] { new Vector2(350, 90), new Vector2(1650, 90) },
             attributes: Attributes(("TYPE", "2"), ("HEIGHT", "210")));
 
         OpeningInterpretation result = new OpeningInterpreter().Interpret(new[] { marker }, walls);
 
-        Assert.Equal(OpeningHanding.Double(SwingSide.Right), Assert.Single(result.Openings).Handing);
-        Assert.Contains(result.Issues, i => i.Code == OpeningIssueCode.MissingHinge && i.Severity == OpeningIssueSeverity.Warning);
+        Assert.Null(Assert.Single(result.Openings).Handing);
+        Assert.Contains(result.Issues, i => i.Code == OpeningIssueCode.MissingHinge && i.Message.Contains("2 visible circles"));
+    }
+
+    /// <summary>A circle on the wall axis gives no swing side: no orientation, with a warning.</summary>
+    [Fact]
+    public void Interpret_CircleOnWallAxis_LeavesOrientationAndWarns()
+    {
+        var walls = new[] { HorizontalWall() };
+        var marker = Marker("door", 1000, 0, 900, 200, hinge: new Vector2(600, 0),
+            attributes: Attributes(("TYPE", "1"), ("HEIGHT", "210")));
+
+        OpeningInterpretation result = new OpeningInterpreter().Interpret(new[] { marker }, walls);
+
+        Assert.Null(Assert.Single(result.Openings).Handing);
+        Assert.Contains(result.Issues, i => i.Code == OpeningIssueCode.MissingHinge);
     }
 
     /// <summary>Windows without a circle and empty openings have no orientation; each kind has its own id prefix.</summary>

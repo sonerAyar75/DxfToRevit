@@ -40,8 +40,8 @@ public enum OpeningIssueCode
     DepthMismatch,
 
     /// <summary>
-    /// The swing of a door or window marker is unclear: no circle (left as Revit places it), a
-    /// circle on the wall axis, or circles on both faces of the wall.
+    /// The swing of a door or window marker is unclear: no circle or more than one (left as
+    /// Revit places it), a circle on the wall axis, or a circle in the middle of the opening.
     /// </summary>
     MissingHinge,
 
