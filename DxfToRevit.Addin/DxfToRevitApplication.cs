@@ -8,7 +8,7 @@ namespace DxfToRevit.Addin;
 
 /// <summary>
 /// Revit application entry point: creates the "DxfToRevit" ribbon tab with the Import DXF,
-/// Column Settings and About buttons.
+/// Settings and About buttons.
 /// </summary>
 /// <remarks>
 /// Button icons follow the Revit UI theme (light or dark) and are swapped automatically when the
@@ -45,16 +45,16 @@ public sealed class DxfToRevitApplication : IExternalApplication
         _resourceDirectory = Path.Combine(Path.GetDirectoryName(assemblyPath) ?? string.Empty, "Resources");
 
         AddButton(panel, assemblyPath, "ImportDxf", "Import\nDXF",
-            typeof(ImportDxfCommand), "Import walls and columns from a DXF drawing.",
+            typeof(ImportDxfCommand), "Import walls, columns, doors, windows and openings from a DXF drawing.",
             "ImportDxf");
 
-        AddButton(panel, assemblyPath, "ColumnSettings", "Column\nSettings",
+        AddButton(panel, assemblyPath, "ColumnSettings", "Settings",
             typeof(ColumnSettingsCommand),
-            "Choose circular Family Types, square fallback, and freeform import options.",
+            "Choose what to import, the levels, the column options and the door and window types.",
             "Settings");
 
         AddButton(panel, assemblyPath, "AboutDxfToRevit", "About",
-            typeof(AboutCommand), "About DxfToRevit.",
+            typeof(AboutCommand), "About DxfToRevit: DXF import of walls, columns, doors, windows and openings.",
             "About");
 
         application.ThemeChanged += OnThemeChanged;

@@ -1,9 +1,11 @@
 # DxfToRevit
 
-Imports walls and columns from 2D architectural DXF drawings into Autodesk Revit.
+Imports walls, columns, doors, windows and openings from 2D architectural DXF drawings into Autodesk Revit.
 
-DxfToRevit reads wall face lines and column outlines from layer-coded DXF files, computes wall
-centerlines with correct L/T junctions, and creates native Revit walls and columns bound to levels.
+DxfToRevit reads wall face lines, column outlines and door, window and opening blocks from
+layer-coded DXF files, computes wall
+centerlines with correct L/T junctions, and creates native Revit walls and columns bound to levels,
+with the doors, windows and openings hosted in the walls.
 The geometry core is host-independent and fully unit-tested; the Revit add-in is a thin adapter.
 
 ## Features

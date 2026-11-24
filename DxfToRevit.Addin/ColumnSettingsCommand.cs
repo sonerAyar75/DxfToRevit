@@ -6,7 +6,7 @@ using System.Windows.Forms;
 namespace DxfToRevit.Addin;
 
 /// <summary>
-/// Ribbon command "Column Settings": opens the import settings dialog on its own so the column
+/// Ribbon command "Settings": opens the import settings dialog on its own so the import
 /// options can be chosen (and families loaded) before importing. Choices are remembered for the session.
 /// </summary>
 [Transaction(TransactionMode.Manual)]

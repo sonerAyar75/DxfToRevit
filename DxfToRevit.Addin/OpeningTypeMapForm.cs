@@ -88,7 +88,7 @@ internal sealed class OpeningTypeMapForm : Form
         {
             Text = (_usages.Count > 0
                        ? $"The DXF contains {dxfOpenings} opening(s). Each door and window TYPE code found in it is listed below.\n"
-                       : "No DXF is loaded: the codes are listed when a drawing is chosen in Import DXF.\n") +
+                       : "No door or window codes to map: no DXF is loaded, or doors and windows are not chosen for import.\n") +
                    "Right-click (or double-click) a Revit type cell to pick from the loaded types.\n" +
                    "When the DXF size differs, the type is duplicated and resized.",
             AutoSize = true,

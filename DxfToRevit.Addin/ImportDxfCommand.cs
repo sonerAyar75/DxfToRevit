@@ -60,8 +60,13 @@ public sealed class ImportDxfCommand : IExternalCommand
             return Result.Cancelled;
         }
 
+        int OpeningCount(OpeningCategory category) => pipe.Openings.Count(o => o.Definition.Category == category);
+        var counts = new ImportCounts(
+            pipe.WallSolids.Count, pipe.Columns.Count,
+            OpeningCount(OpeningCategory.Door), OpeningCount(OpeningCategory.Window), OpeningCount(OpeningCategory.EmptyOpening));
+
         using var settingsForm = new ColumnImportSettingsForm(
-            doc, System.IO.Path.GetFileName(path), OpeningCodeSummary.Build(pipe.Openings));
+            doc, System.IO.Path.GetFileName(path), OpeningCodeSummary.Build(pipe.Openings), counts);
         if (settingsForm.ShowDialog() != System.Windows.Forms.DialogResult.OK)
             return Result.Cancelled;
 
@@ -91,15 +96,17 @@ public sealed class ImportDxfCommand : IExternalCommand
                 : "Freeform Column"
         };
 
-        IReadOnlyList<ColumnCreationRequest> columnRequests = columnFactory
-            .FromColumnModels(pipe.Columns)
-            .Where(request => request.Type.SectionKind switch
-            {
-                ColumnSectionKind.Circular => settingsForm.IncludeCircularColumns,
-                ColumnSectionKind.Freeform => settingsForm.IncludeFreeformColumns,
-                _ => true
-            })
-            .ToList();
+        IReadOnlyList<ColumnCreationRequest> columnRequests = !settingsForm.IncludeColumns
+            ? Array.Empty<ColumnCreationRequest>()
+            : columnFactory
+                .FromColumnModels(pipe.Columns)
+                .Where(request => request.Type.SectionKind switch
+                {
+                    ColumnSectionKind.Circular => settingsForm.IncludeCircularColumns,
+                    ColumnSectionKind.Freeform => settingsForm.IncludeFreeformColumns,
+                    _ => true
+                })
+                .ToList();
 
         var context = new RevitApiDocumentContext(doc);
         var service = new BuildingModelService(
@@ -107,9 +114,51 @@ public sealed class ImportDxfCommand : IExternalCommand
             new RevitColumnCreator(context),
             openingCreator: new RevitOpeningCreator(context));
 
-        IReadOnlyList<OpeningCreationRequest> openingRequests = settingsForm.IncludeOpenings
-            ? new OpeningCreationRequestFactory(session, OpeningImportPreferences.TypeMap).FromOpeningModels(pipe.Openings)
+        IReadOnlyList<OpeningCreationRequest> openingRequests = settingsForm.IncludeAnyOpening
+            ? new OpeningCreationRequestFactory(session, OpeningImportPreferences.TypeMap)
+                .FromOpeningModels(pipe.Openings)
+                .Where(r => r.Category switch
+                {
+                    OpeningCategory.Door => settingsForm.IncludeDoors,
+                    OpeningCategory.Window => settingsForm.IncludeWindows,
+                    _ => settingsForm.IncludeEmptyOpenings
+                })
+                .ToList()
             : Array.Empty<OpeningCreationRequest>();
+
+        // Elements already in the model: always used to host doors and windows in existing walls;
+        // skipped (not created again) when the user asked for it.
+        var matcher = new ExistingElementMatcher(RevitExistingElementReader.Read(doc));
+        ExistingSplit<WallCreationRequest> walls =
+            ExistingElementMatcher.Split(wallRequests, r => r.Id, matcher.FindWall);
+        bool skip = settingsForm.SkipExisting;
+        var skipped = new SkippedCounts(
+            settingsForm.IncludeWalls && skip ? walls.Existing.Count : 0, 0, 0, 0, 0);
+
+        IReadOnlyList<WallCreationRequest> wallsToCreate = !settingsForm.IncludeWalls
+            ? Array.Empty<WallCreationRequest>()
+            : skip ? walls.New : wallRequests;
+
+        if (skip)
+        {
+            ExistingSplit<ColumnCreationRequest> columns =
+                ExistingElementMatcher.Split(columnRequests, r => r.Id, matcher.FindColumn);
+            ExistingSplit<OpeningCreationRequest> openings =
+                ExistingElementMatcher.Split(openingRequests, r => r.Id, matcher.FindOpening);
+            IReadOnlyList<OpeningCreationRequest> allOpenings = openingRequests;
+            int Skipped(OpeningCategory category) =>
+                allOpenings.Count(r => r.Category == category && openings.Existing.ContainsKey(r.Id));
+
+            columnRequests = columns.New;
+            openingRequests = openings.New;
+            skipped = skipped with
+            {
+                Columns = columns.Existing.Count,
+                Doors = Skipped(OpeningCategory.Door),
+                Windows = Skipped(OpeningCategory.Window),
+                EmptyOpenings = Skipped(OpeningCategory.EmptyOpening)
+            };
+        }
 
         IReadOnlyList<WallCreationResult> wallResults = Array.Empty<WallCreationResult>();
         IReadOnlyList<ColumnCreationResult> columnResults = Array.Empty<ColumnCreationResult>();
@@ -123,12 +172,13 @@ public sealed class ImportDxfCommand : IExternalCommand
         {
             using RevitImportBatch batch = context.BeginBatch("DxfToRevit Import DXF");
 
-            wallResults = service.CreateWalls(wallRequests);
+            wallResults = service.CreateWalls(wallsToCreate);
             batch.Regenerate();   // walls must exist geometrically before columns join and openings are hosted
             columnResults = service.CreateColumns(columnRequests);
 
-            // Openings need their host walls, so they are created last.
-            openingResults = service.CreateOpenings(openingRequests, MapHostWallIds(wallResults));
+            // Openings need their host walls, so they are created last: in the walls created now,
+            // otherwise in the matching walls already in the model.
+            openingResults = service.CreateOpenings(openingRequests, MapHostWallIds(wallResults, walls.Existing));
 
             bool hasSuccess = wallResults.Any(r => r.Success) || columnResults.Any(r => r.Success) ||
                               openingResults.Any(r => r.Success);
@@ -160,10 +210,11 @@ public sealed class ImportDxfCommand : IExternalCommand
             return Result.Failed;
         }
 
-        ShowSummary(path, pipe, wallResults, columnResults, openingResults, settingsForm.IncludeOpenings, revitWarnings);
+        ShowSummary(path, pipe, wallResults, columnResults, openingResults, settingsForm.IncludeAnyOpening,
+            revitWarnings, skipped);
         bool anySuccess = wallResults.Any(r => r.Success) || columnResults.Any(r => r.Success) ||
                           openingResults.Any(r => r.Success);
-        return anySuccess ? Result.Succeeded : Result.Failed;
+        return anySuccess || skipped.Total > 0 ? Result.Succeeded : Result.Failed;
     }
 
     /// <summary>
@@ -234,7 +285,8 @@ public sealed class ImportDxfCommand : IExternalCommand
         IReadOnlyList<ColumnCreationResult> columns,
         IReadOnlyList<OpeningCreationResult> openings,
         bool openingsIncluded,
-        IReadOnlyList<RevitWarningGroup> revitWarnings)
+        IReadOnlyList<RevitWarningGroup> revitWarnings,
+        SkippedCounts skipped)
     {
         int wallsOk = walls.Count(r => r.Success);
         int columnsOk = columns.Count(r => r.Success);
@@ -247,6 +299,12 @@ public sealed class ImportDxfCommand : IExternalCommand
         sb.AppendLine($"Columns created: {columnsOk} / {columns.Count}");
         if (openingsIncluded)
             sb.AppendLine($"Openings created: {openingsOk} / {openings.Count} (markers in DXF: {pipe.OpeningMarkerCount})");
+
+        if (skipped.Total > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"Already in the model, not created again: {skipped.Describe()}.");
+        }
 
         IReadOnlyList<RevitWarningGroup> overlapWarnings =
             revitWarnings.Where(w => w.Kind == RevitWarningKind.Overlap).ToList();
@@ -296,12 +354,17 @@ public sealed class ImportDxfCommand : IExternalCommand
     }
 
     /// <summary>
-    /// Maps each wall request id to the element id of the wall created for it, so openings can find
-    /// their host walls.
+    /// Maps each wall request id to the element id of its wall, so openings can find their host walls:
+    /// the wall created now, otherwise the matching wall already in the model.
     /// </summary>
-    private static IReadOnlyDictionary<string, string> MapHostWallIds(IReadOnlyList<WallCreationResult> walls) =>
-        walls.Where(r => r.Success && r.HostElementId is not null)
-             .ToDictionary(r => r.RequestId, r => r.HostElementId!, StringComparer.Ordinal);
+    private static IReadOnlyDictionary<string, string> MapHostWallIds(
+        IReadOnlyList<WallCreationResult> created, IReadOnlyDictionary<string, string> existing)
+    {
+        var hosts = new Dictionary<string, string>(existing, StringComparer.Ordinal);
+        foreach (WallCreationResult r in created.Where(r => r.Success && r.HostElementId is not null))
+            hosts[r.RequestId] = r.HostElementId!;
+        return hosts;
+    }
 
     /// <summary>
     /// Appends a titled section of opening issues grouped by code, with up to five DXF locations each.
