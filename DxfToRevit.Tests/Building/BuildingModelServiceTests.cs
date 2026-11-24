@@ -6,7 +6,7 @@ using Xunit;
 namespace DxfToRevit.Tests.Building;
 
 /// <summary>
-/// BuildingModelService: validate + create orkestrasyonu.
+/// BuildingModelService: validation and creation.
 /// </summary>
 public sealed class BuildingModelServiceTests
 {

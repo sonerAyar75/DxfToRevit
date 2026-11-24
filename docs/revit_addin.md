@@ -35,24 +35,26 @@ Choices are remembered for the Revit session (`ImportSelectionPreferences`, `Col
 
 ## Import flow
 
+The import is made of modules (walls, columns, openings), see @ref import_modules.
+
 1. DXF file selection and `DxfCenterLinePipeline.Analyze` (no files are written next to the DXF).
-2. Settings dialog, with the door and window codes found in the DXF ready to be mapped. When the
+2. `ImportModuleCatalog` creates the modules; the settings dialog shows one check box per module
+   category with its count in the DXF, and the door and window codes ready to be mapped. When the
    default opening heights are changed there, the DXF is analysed again.
-3. Requests are built with the session options: wall types by thickness, column kinds and keys,
-   opening types from the type map; only the chosen categories are kept.
-4. Existing elements: `RevitExistingElementReader` reads the walls, columns, doors, windows and
-   wall openings of the model and `ExistingElementMatcher` finds the requests they already cover
-   (same level, same place, same kind; walls also the same thickness). Matching walls always host
-   the doors and windows whose wall is not created now; when *Skip elements that already exist* is
-   on, matching requests are not created and are counted in the summary.
-5. `BuildingModelService` validates the requests and calls `RevitWallCreator`,
-   `RevitColumnCreator` and, last, `RevitOpeningCreator` (openings need their host walls), which
-   delegate to `RevitApiDocumentContext`.
-6. All elements are written in one batch (`RevitImportBatch`, see *Batch writing* below) and
-   committed once, as a single undo step, or rolled back when nothing could be created.
-7. A summary dialog shows counts, elements already in the model, skipped ambiguous face pairs,
-   grouped failures and notes, and
-   opening markers that were not imported or have warnings.
+3. `ImportCoordinator.Plan`: every module builds its requests with the session options (wall types
+   by thickness, column options, opening types from the type map). `RevitExistingElementReader`
+   reads the walls, columns, doors, windows and wall openings of the model and
+   `ExistingElementMatcher` finds the requests they already cover (same level, same place, same
+   kind; walls also the same thickness). Matching walls always host the doors and windows whose
+   wall is not created now; when *Skip elements that already exist* is on, matching requests are
+   not created and are counted in the summary.
+4. `ImportCoordinator.Create`, inside one batch (`RevitImportBatch`, see *Batch writing* below):
+   every module creates through `BuildingModelService` and the Revit creators, which delegate to
+   `RevitApiDocumentContext`; the model is regenerated after the walls. The batch is committed
+   once, as a single undo step, or rolled back when nothing could be created.
+5. A summary dialog shows, per module, the counts, failures, notes and sections (for example
+   opening markers that were not imported or have warnings), plus elements already in the model,
+   overlaps and skipped ambiguous face pairs.
 
 ### Batch writing
 

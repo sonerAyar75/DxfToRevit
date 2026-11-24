@@ -1,6 +1,7 @@
 using Autodesk.Revit.DB;
 using System.Windows.Forms;
 using DxfToRevit.Core.Building;
+using DxfToRevit.Core.Import;
 using DxfToRevit.Core.Openings;
 using DxfToRevit.Revit;
 
@@ -95,11 +96,8 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
     private readonly Label _circularInfo = new() { AutoSize = true };
     private readonly Label _squareInfo = new() { AutoSize = true };
 
-    private readonly CheckBox _includeWalls = CreateCategoryBox(ImportSelectionPreferences.IncludeWalls);
-    private readonly CheckBox _includeColumns = CreateCategoryBox(ImportSelectionPreferences.IncludeColumns);
-    private readonly CheckBox _includeDoors = CreateCategoryBox(ImportSelectionPreferences.IncludeDoors);
-    private readonly CheckBox _includeWindows = CreateCategoryBox(ImportSelectionPreferences.IncludeWindows);
-    private readonly CheckBox _includeEmptyOpenings = CreateCategoryBox(ImportSelectionPreferences.IncludeEmptyOpenings);
+    /// <summary>One check box per import category of the modules, by category key.</summary>
+    private readonly Dictionary<string, (ImportCategory Category, CheckBox Box)> _categoryBoxes = new(StringComparer.Ordinal);
 
     private readonly CheckBox _skipExisting = new()
     {
@@ -117,18 +115,20 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
     private readonly bool _dxfLoaded;
     private readonly IReadOnlyList<OpeningCodeUsage> _openingUsages;
 
-    /// <summary>Whether walls are imported.</summary>
-    public bool IncludeWalls => _includeWalls.Checked;
-    /// <summary>Whether columns are imported.</summary>
-    public bool IncludeColumns => _includeColumns.Checked;
-    /// <summary>Whether doors are imported.</summary>
-    public bool IncludeDoors => _includeDoors.Checked;
-    /// <summary>Whether windows are imported.</summary>
-    public bool IncludeWindows => _includeWindows.Checked;
-    /// <summary>Whether empty wall openings are imported.</summary>
-    public bool IncludeEmptyOpenings => _includeEmptyOpenings.Checked;
-    /// <summary>Whether doors, windows or empty openings are imported.</summary>
-    public bool IncludeAnyOpening => IncludeDoors || IncludeWindows || IncludeEmptyOpenings;
+    /// <summary>Keys of the categories chosen for import.</summary>
+    public IReadOnlyList<string> IncludedCategoryKeys =>
+        _categoryBoxes.Values.Where(c => c.Box.Checked).Select(c => c.Category.Key).ToList();
+
+    /// <summary>Whether a category is chosen for import; <c>false</c> when the dialog does not offer it.</summary>
+    /// <param name="category">Import category.</param>
+    public bool IsIncluded(ImportCategory category) =>
+        _categoryBoxes.TryGetValue(category.Key, out var entry) && entry.Box.Checked;
+
+    private bool IncludeColumns => IsIncluded(ImportCategories.Columns);
+    private bool IncludeDoors => IsIncluded(ImportCategories.Doors);
+    private bool IncludeWindows => IsIncluded(ImportCategories.Windows);
+    private bool IncludeEmptyOpenings => IsIncluded(ImportCategories.EmptyOpenings);
+
     /// <summary>Whether elements already in the model are skipped.</summary>
     public bool SkipExisting => _skipExisting.Checked;
 
@@ -170,25 +170,32 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
 
     /// <summary>Builds the dialog and fills the level and column type lists from the document.</summary>
     /// <param name="document">Project document.</param>
+    /// <param name="categories">The import categories of the modules, with their counts in the DXF; one check box each.</param>
     /// <param name="dxfFileName">Name of the DXF being imported; <c>null</c> when the dialog is opened on its own.</param>
     /// <param name="openingUsages">Door, window and opening codes found in the DXF, listed in the type map editor.</param>
-    /// <param name="counts">Elements per category in the DXF, shown next to the check boxes; <c>null</c> without a DXF.</param>
-    /// <exception cref="System.ArgumentNullException"><paramref name="document"/> is <c>null</c>.</exception>
+    /// <exception cref="System.ArgumentNullException"><paramref name="document"/> or <paramref name="categories"/> is <c>null</c>.</exception>
     public ColumnImportSettingsForm(
         Document document,
+        IReadOnlyList<ImportCategoryChoice> categories,
         string? dxfFileName = null,
-        IReadOnlyList<OpeningCodeUsage>? openingUsages = null,
-        ImportCounts? counts = null)
+        IReadOnlyList<OpeningCodeUsage>? openingUsages = null)
     {
         ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(categories);
         _dxfLoaded = dxfFileName is not null;
         _openingUsages = openingUsages ?? Array.Empty<OpeningCodeUsage>();
 
-        _includeWalls.Text = CategoryText("Walls", counts?.Walls);
-        _includeColumns.Text = CategoryText("Columns", counts?.Columns);
-        _includeDoors.Text = CategoryText("Doors", counts?.Doors);
-        _includeWindows.Text = CategoryText("Windows", counts?.Windows);
-        _includeEmptyOpenings.Text = CategoryText("Empty openings", counts?.EmptyOpenings);
+        foreach (ImportCategoryChoice choice in categories)
+        {
+            var box = new CheckBox
+            {
+                AutoSize = true,
+                Margin = new Padding(3, 3, 14, 3),
+                Text = choice.Count is int n ? $"{choice.Category.Name} ({n})" : choice.Category.Name,
+                Checked = ImportSelectionPreferences.IsIncluded(choice.Category)
+            };
+            _categoryBoxes[choice.Category.Key] = (choice.Category, box);
+        }
 
         Text = dxfFileName is null ? "DxfToRevit - Import Settings" : $"DxfToRevit - Import Settings - {dxfFileName}";
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -222,12 +229,12 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
             Dock = DockStyle.Fill,
             WrapContents = false
         };
-        var categories = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
-        categories.Controls.AddRange(new System.Windows.Forms.Control[] { _includeWalls, _includeColumns, _includeDoors, _includeWindows, _includeEmptyOpenings });
-        importLayout.Controls.Add(categories);
+        var categoryPanel = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        categoryPanel.Controls.AddRange(_categoryBoxes.Values.Select(c => (System.Windows.Forms.Control)c.Box).ToArray());
+        importLayout.Controls.Add(categoryPanel);
         importLayout.Controls.Add(_skipExisting);
         importGroup.Controls.Add(importLayout);
-        foreach (CheckBox box in new[] { _includeWalls, _includeColumns, _includeDoors, _includeWindows, _includeEmptyOpenings })
+        foreach (CheckBox box in _categoryBoxes.Values.Select(c => c.Box))
             box.CheckedChanged += (_, _) =>
             {
                 UpdateEnabledState();
@@ -425,7 +432,7 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
                     return;
                 }
 
-                if (_dxfLoaded && !IncludeWalls && !IncludeColumns && !IncludeAnyOpening)
+                if (_dxfLoaded && IncludedCategoryKeys.Count == 0)
                 {
                     e.Cancel = true;
                     MessageBox.Show(this, "Choose at least one category to import.",
@@ -473,11 +480,8 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
                 ColumnImportPreferences.FreeformAsFamily = FreeformAsFamily;
                 ColumnImportPreferences.CircularTypeKey = SelectedCircularTypeKey;
                 ColumnImportPreferences.SquareTypeKey = SelectedSquareTypeKey;
-                ImportSelectionPreferences.IncludeWalls = IncludeWalls;
-                ImportSelectionPreferences.IncludeColumns = IncludeColumns;
-                ImportSelectionPreferences.IncludeDoors = IncludeDoors;
-                ImportSelectionPreferences.IncludeWindows = IncludeWindows;
-                ImportSelectionPreferences.IncludeEmptyOpenings = IncludeEmptyOpenings;
+                foreach ((ImportCategory category, CheckBox box) in _categoryBoxes.Values)
+                    ImportSelectionPreferences.SetIncluded(category, box.Checked);
                 ImportSelectionPreferences.SkipExisting = SkipExisting;
             }
         };
@@ -669,14 +673,6 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
         // Height is editable only when Top Constraint is Unconnected.
         _unconnectedHeight.Enabled = SelectedTopLevelName is null;
     }
-
-    /// <summary>A category check box.</summary>
-    private static CheckBox CreateCategoryBox(bool isChecked) =>
-        new() { AutoSize = true, Checked = isChecked, Margin = new Padding(3, 3, 14, 3) };
-
-    /// <summary>Category label with the number found in the DXF, for example <c>Doors (11)</c>.</summary>
-    private static string CategoryText(string name, int? count) =>
-        count is int n ? $"{name} ({n})" : name;
 
     /// <summary>Opens the opening type map editor and stores the result in <see cref="OpeningImportPreferences"/>.</summary>
     private void EditOpeningTypes(Document document)

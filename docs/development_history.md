@@ -34,6 +34,7 @@ DxfToRevit builds the Revit model from it.
 | 14 | Circle count duplicated what the `TYPE` family already says | One circle per door or window: swing side and hinge end only | `OpeningInterpreter`, `OpeningHanding` |
 | 15 | Importing the same drawing twice gave no message | Revit's overlap warnings are collected and shown first in the summary | `RevitWarningLog`, `RevitBatchResult` |
 | 16 | Adding elements to an imported drawing meant importing everything again | Category check boxes; elements already in the model are skipped and host the new doors and windows | `ExistingElementMatcher`, `RevitExistingElementReader`, `ImportSelectionPreferences` |
+| 17 | Floors, rooms and roofs are next; every element type was wired in by hand | Every kind of element is an import module run by a coordinator | `IImportModule`, `ImportCoordinator`, `ImportModuleCatalog` |
 
 ## Classes by need (short)
 
@@ -358,6 +359,31 @@ in Revit are recognised too.
 - Not done on purpose: elements deleted from the drawing are not deleted from the model, and a wall
   changed in the drawing is created again (Revit reports the overlap).
 
+## Stage 17 - Import modules
+
+**Requirement.** Next come floors, rooms, ceilings and roofs. Walls, columns and openings were
+wired into the import command, the settings dialog and the summary one by one, so every new kind
+of element would have touched all of them. The structure should be flexible and easy to extend.
+
+**Decision.** Every kind of element is an import module; the flow works with modules only. No
+behaviour changes: the existing tests pass unchanged, and new tests run the whole flow with the
+in-memory creators.
+
+- `IImportModule` (Core): categories (check boxes), `Order`, `RegenerateAfter`, `CountInDrawing`,
+  `Plan` (requests, elements already in the model) and `Create`. `WallImportModule`,
+  `ColumnImportModule` and `OpeningImportModule` hold what the command did before.
+- `ImportCoordinator` orders the modules, plans, creates and regenerates; `ImportBag` carries the
+  module options (`ColumnImportOptions`, `OpeningImportOptions`) and the data modules share
+  (`HostWallMap`: walls created now or already in the model, for the doors and windows).
+- `ImportModuleResult` is the same for every module: entries, notes, extra summary sections (the
+  opening marker issues) and `WithCommitOutcome` for elements Revit removed at commit.
+- Add-in: `ImportModuleCatalog` registers the modules; the settings dialog builds its check boxes
+  from the module categories; `ImportSelectionPreferences` keeps the choices by category key, so a
+  new module is imported by default; the summary is written from the module results.
+- How to add a module (for example floors) is described in `docs/import_modules.md`. A drawing of
+  another kind (a section for extrusion roofs) would be a separate ribbon command reusing the same
+  pattern.
+
 ---
 
 # Part 3 - Class reference by need
@@ -463,6 +489,7 @@ the generated API reference.
 | `RevitWallCreator`, `RevitColumnCreator`, `RevitOpeningCreator` | Building API → document context | `CreateWall`, `CreateColumn`, `CreateOpening` |
 | `RevitImportBatch`, `RevitChangeScope`, `RevitBatchFailureHandler` | Fast, single-undo import that survives failing elements | `Regenerate`, `Commit`, `Start`, `PreprocessFailures` |
 | `RevitWarningLog`, `RevitWarningGroup` | Keeps the warnings Revit raises at commit, so overlaps (a drawing imported twice) reach the summary | `Add`, `Groups`, `RevitBatchResult.HasOverlaps` |
+| `IImportModule`, `ImportCoordinator`, `ImportModuleCatalog` | One kind of element per module; the flow, the settings check boxes and the summary work with any module | `Plan`, `Create`, `CountInDrawing`, `WithCommitOutcome` |
 
 ## User interface (add-in)
 

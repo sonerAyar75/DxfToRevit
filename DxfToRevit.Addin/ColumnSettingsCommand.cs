@@ -2,6 +2,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using System.Windows.Forms;
+using DxfToRevit.Revit;
 
 namespace DxfToRevit.Addin;
 
@@ -26,7 +27,9 @@ public sealed class ColumnSettingsCommand : IExternalCommand
             return Result.Failed;
         }
 
-        using var form = new ColumnImportSettingsForm(document);
+        var context = new RevitApiDocumentContext(document);
+        using var form = new ColumnImportSettingsForm(
+            document, ImportModuleCatalog.Choices(ImportModuleCatalog.Create(context), drawing: null));
         return form.ShowDialog() == DialogResult.OK ? Result.Succeeded : Result.Cancelled;
     }
 }

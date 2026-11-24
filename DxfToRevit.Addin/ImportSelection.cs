@@ -1,55 +1,35 @@
+using DxfToRevit.Core.Import;
+
 namespace DxfToRevit.Addin;
 
-/// <summary>How many elements of each category the DXF contains, shown next to the import check boxes.</summary>
-/// <param name="Walls">Walls.</param>
-/// <param name="Columns">Columns.</param>
-/// <param name="Doors">Doors.</param>
-/// <param name="Windows">Windows.</param>
-/// <param name="EmptyOpenings">Empty wall openings.</param>
-internal sealed record ImportCounts(int Walls, int Columns, int Doors, int Windows, int EmptyOpenings);
-
-/// <summary>How many elements of each category were not created because they are already in the model.</summary>
-/// <param name="Walls">Walls.</param>
-/// <param name="Columns">Columns.</param>
-/// <param name="Doors">Doors.</param>
-/// <param name="Windows">Windows.</param>
-/// <param name="EmptyOpenings">Empty wall openings.</param>
-internal sealed record SkippedCounts(int Walls, int Columns, int Doors, int Windows, int EmptyOpenings)
-{
-    /// <summary>All skipped elements.</summary>
-    public int Total => Walls + Columns + Doors + Windows + EmptyOpenings;
-
-    /// <summary>The non-zero counts, for example <c>12 walls, 3 doors</c>.</summary>
-    public string Describe() =>
-        string.Join(", ", new[]
-            {
-                (Walls, "wall(s)"), (Columns, "column(s)"), (Doors, "door(s)"), (Windows, "window(s)"),
-                (EmptyOpenings, "empty opening(s)")
-            }
-            .Where(c => c.Item1 > 0)
-            .Select(c => $"{c.Item1} {c.Item2}"));
-}
+/// <summary>A category check box of the import settings: the category and how many the DXF contains.</summary>
+/// <param name="Category">Import category of a module.</param>
+/// <param name="Count">Elements in the DXF; <c>null</c> when no DXF is loaded.</param>
+internal sealed record ImportCategoryChoice(ImportCategory Category, int? Count);
 
 /// <summary>
 /// Which categories are imported, and whether elements already in the model are skipped;
-/// remembered for the current Revit session.
+/// remembered for the current Revit session. Categories are kept by key, so the categories of a
+/// new module are imported unless the user turns them off.
 /// </summary>
 internal static class ImportSelectionPreferences
 {
-    /// <summary>Whether walls are imported.</summary>
-    public static bool IncludeWalls { get; set; } = true;
+    private static readonly HashSet<string> Excluded = new(StringComparer.Ordinal);
 
-    /// <summary>Whether columns are imported.</summary>
-    public static bool IncludeColumns { get; set; } = true;
+    /// <summary>Whether a category is imported.</summary>
+    /// <param name="category">Import category.</param>
+    public static bool IsIncluded(ImportCategory category) => !Excluded.Contains(category.Key);
 
-    /// <summary>Whether doors are imported.</summary>
-    public static bool IncludeDoors { get; set; } = true;
-
-    /// <summary>Whether windows are imported.</summary>
-    public static bool IncludeWindows { get; set; } = true;
-
-    /// <summary>Whether empty wall openings are imported.</summary>
-    public static bool IncludeEmptyOpenings { get; set; } = true;
+    /// <summary>Remembers whether a category is imported.</summary>
+    /// <param name="category">Import category.</param>
+    /// <param name="included">Whether it is imported.</param>
+    public static void SetIncluded(ImportCategory category, bool included)
+    {
+        if (included)
+            Excluded.Remove(category.Key);
+        else
+            Excluded.Add(category.Key);
+    }
 
     /// <summary>
     /// Whether elements that are already in the model (same kind, same place, same level) are
