@@ -36,6 +36,7 @@ DxfToRevit builds the Revit model from it.
 | 16 | Adding elements to an imported drawing meant importing everything again | Category check boxes; elements already in the model are skipped and host the new doors and windows | `ExistingElementMatcher`, `RevitExistingElementReader`, `ImportSelectionPreferences` |
 | 17 | Floors, rooms and roofs are next; every element type was wired in by hand | Every kind of element is an import module run by a coordinator | `IImportModule`, `ImportCoordinator`, `ImportModuleCatalog` |
 | 18 | Mixed folder conventions, several types per file, outdated names | Folders and namespaces by feature, one type per file, sorted usings | (structure only) |
+| 19 | One Revit class created every element and another resolved every type | A facade over one writer and one type resolver per kind of element; batch participants | `RevitWallWriter`, `RevitColumnWriter`, `RevitOpeningWriter`, `IRevitBatchParticipant` |
 
 ## Classes by need (short)
 
@@ -52,7 +53,7 @@ DxfToRevit builds the Revit model from it.
 | Check without Revit | `DxfSimulationWriter`, `InMemoryBuildingModel` and the in-memory creators |
 | Describe what to build, independent of Revit | `WallCreationRequest`, `ColumnCreationRequest`, `OpeningCreationRequest`, their factories and validators, `BuildingModelService` |
 | Decide Revit details without the API (testable) | `LengthUnitConverter`, the `*CreateArgsMapper`s, `LevelMatchPlanner`, `WallTypeMatchPlanner`, `ColumnTypeMatchPlanner`, `OpeningOrientationPlanner`, `OpeningTypeKey` |
-| Write to Revit | `RevitApiDocumentContext`, `RevitElementResolver`, `RevitColumnPlacement`, `RevitFreeformColumnFamilyBuilder`, `RevitImportBatch` |
+| Write to Revit | `RevitApiDocumentContext`, the writers and type resolvers of each feature, `RevitColumnPlacement`, `RevitFreeformColumnFamilyBuilder`, `RevitImportBatch` |
 | User interface | `DxfToRevitApplication`, `ImportDxfCommand`, `ImportSettingsForm`, `OpeningTypeMapForm`, the preferences classes |
 
 ---
@@ -412,6 +413,31 @@ same tests pass (309 core, 88 Revit adapter tests), the build has no warnings.
 - Renamed: `ColumnImportSettingsForm` → `ImportSettingsForm`, `ColumnSettingsCommand` →
   `SettingsCommand` (the ribbon button keeps its internal name).
 
+## Stage 19 - One Revit writer per kind of element
+
+**Requirement.** `RevitApiDocumentContext` (about 730 lines) created walls, columns in three ways,
+doors, windows and openings, flipped doors and windows, and ran the batch; `RevitElementResolver`
+(about 650 lines) resolved levels, wall types, column types and door/window types. Floors would
+have made both larger again.
+
+**Decision.** Split by kind of element, keep the public surface. No behaviour changes: the code was
+moved, not rewritten, and the add-in and the tests use the same `IRevitDocumentContext`.
+
+- `RevitApiDocumentContext` is a **facade**: it builds one writer per kind of element and
+  delegates (`RevitWallWriter`, `RevitColumnWriter` with `RevitColumnSolidWriter` for columns
+  without a family, `RevitOpeningWriter`).
+- The resolver is split into `RevitLevelResolver` (shared; it also checks that the top level is
+  above the base level, which three writers did by hand), `RevitWallTypeResolver`,
+  `RevitColumnTypeResolver` and `RevitOpeningTypeResolver`; `RevitParameters` holds the parameter
+  helpers they share.
+- The batch no longer knows about doors: writers that defer work implement
+  `IRevitBatchParticipant` (started, before commit, ended). The opening writer collects the door and
+  window flips and applies them before the commit; a floor writer could take part the same way.
+- The Revit project is organised by feature like the core: `Walls`, `Columns`, `Openings`,
+  `Import` (batch, failure handler, warnings, existing elements) and `Common`.
+- The unused `GetOpeningTypeKeys` of the context was removed (the settings dialog reads the types
+  itself).
+
 ---
 
 # Part 3 - Class reference by need
@@ -510,8 +536,9 @@ the generated API reference.
 | Class | Why it exists | Important members |
 |-------|---------------|-------------------|
 | `IRevitDocumentContext`, `NullRevitDocumentContext` | Creators work with or without a document | `CreateBasicWall`, `CreateColumn`, `CreateOpening` |
-| `RevitApiDocumentContext` | The only class that creates elements | the create methods, `BeginBatch(name)`, `GetOpeningTypeKeys(category)` |
-| `RevitElementResolver` | Levels and types, created when missing, cached | `ResolveLevel`, `ResolveWallType`, `ResolveColumnSymbol`, `ResolveOpeningSymbol` |
+| `RevitApiDocumentContext` | Facade over the writers; runs the import batch and notifies its participants | the create methods, `BeginBatch(name)` |
+| `RevitWallWriter`, `RevitColumnWriter`, `RevitColumnSolidWriter`, `RevitOpeningWriter` | One writer per kind of element; the opening writer defers door and window flips to the end of the batch (`IRevitBatchParticipant`) | `Create`, `BeforeCommit` |
+| `RevitLevelResolver`, `RevitWallTypeResolver`, `RevitColumnTypeResolver`, `RevitOpeningTypeResolver` | Levels and types, created when missing, cached | `TryResolve`, `Resolve` |
 | `RevitColumnPlacement` | Column level constraints | `TryApplyHeight` |
 | `RevitFreeformColumnFamilyBuilder` | Level-bound families for freeform sections | `GetOrCreate(profile, out error)` |
 | `RevitWallCreator`, `RevitColumnCreator`, `RevitOpeningCreator` | Building API → document context | `CreateWall`, `CreateColumn`, `CreateOpening` |

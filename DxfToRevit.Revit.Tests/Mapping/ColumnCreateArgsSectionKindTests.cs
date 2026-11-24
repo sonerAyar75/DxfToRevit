@@ -1,4 +1,5 @@
 using DxfToRevit.Core.Columns;
+using DxfToRevit.Revit.Columns;
 using netDxf;
 
 namespace DxfToRevit.Revit.Tests.Mapping;

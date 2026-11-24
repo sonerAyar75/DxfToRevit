@@ -1,3 +1,5 @@
+using DxfToRevit.Revit.Import;
+
 namespace DxfToRevit.Revit.Tests.Mapping;
 
 /// <summary>Grouping of the Revit warnings collected at the commit of an import.</summary>

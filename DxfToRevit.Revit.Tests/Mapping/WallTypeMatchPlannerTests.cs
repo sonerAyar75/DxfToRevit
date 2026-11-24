@@ -1,3 +1,5 @@
+using DxfToRevit.Revit.Walls;
+
 namespace DxfToRevit.Revit.Tests.Mapping;
 
 /// <summary>WallTypeMatchPlanner: exact type name, family with matching width, or duplicate proposal.</summary>

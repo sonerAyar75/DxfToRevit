@@ -99,7 +99,7 @@ flipped only when they differ from the desired ones, so any door or window famil
 | Interpretation | `OpeningRegionFilter`, `OpeningWallMatcher`, `OpeningPlacement`, `OpeningHanding`, `OpeningModel`, `OpeningIssue` |
 | Building API | `OpeningCreationRequest`, `OpeningCreationRequestFactory`, `OpeningCreationValidator`, `IOpeningCreator`, `OpeningCreationResult`, `InMemoryOpeningCreator`, `BuildingModelService.CreateOpenings` |
 | Type mapping | `OpeningTypeMap`, `OpeningTypeMapFile` |
-| Revit | `OpeningCreateArgs`, `OpeningCreateArgsMapper`, `OpeningOrientationPlanner`, `OpeningOrientationConvention`, `OpeningTypeKey`, `RevitOpeningParameterNames`, `RevitOpeningCreator`, `RevitApiDocumentContext.CreateOpening`, `RevitElementResolver.ResolveOpeningSymbol` |
+| Revit | `OpeningCreateArgs`, `OpeningCreateArgsMapper`, `OpeningOrientationPlanner`, `OpeningOrientationConvention`, `OpeningTypeKey`, `RevitOpeningParameterNames`, `RevitOpeningCreator`, `RevitOpeningWriter`, `RevitOpeningTypeResolver` |
 | Add-in | `OpeningTypeMapForm`, `OpeningImportPreferences`, `ImportSettingsForm` (openings group), `ImportDxfCommand` |
 
 A new kind (for example a sliding door) is a new `OpeningDefinition` entry, not a new class:

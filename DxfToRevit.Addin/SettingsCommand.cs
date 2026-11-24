@@ -1,7 +1,11 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using DxfToRevit.Revit;
+using DxfToRevit.Revit.Columns;
+using DxfToRevit.Revit.Common;
+using DxfToRevit.Revit.Import;
+using DxfToRevit.Revit.Openings;
+using DxfToRevit.Revit.Walls;
 using System.Windows.Forms;
 
 namespace DxfToRevit.Addin;

@@ -1,3 +1,6 @@
+using DxfToRevit.Revit.Columns;
+using DxfToRevit.Revit.Common;
+
 namespace DxfToRevit.Revit.Tests.Mapping;
 
 /// <summary>

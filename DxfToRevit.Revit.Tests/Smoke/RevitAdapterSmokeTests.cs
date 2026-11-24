@@ -1,5 +1,8 @@
 using DxfToRevit.Core.Columns;
 using DxfToRevit.Core.Walls;
+using DxfToRevit.Revit.Columns;
+using DxfToRevit.Revit.Common;
+using DxfToRevit.Revit.Walls;
 using netDxf;
 
 namespace DxfToRevit.Revit.Tests.Smoke;

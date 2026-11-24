@@ -10,8 +10,8 @@ DxfToRevit.App / DxfToRevit.Console        DxfToRevit.Addin (Revit 2025)
               │                                   │  compiles DxfToRevit.Revit sources
               ▼                                   ▼  with REVIT_API_AVAILABLE
         DxfToRevit.Core  ◄─────────────────  DxfToRevit.Revit
-   Walls · Columns · Openings              planners (API-free) · RevitApiDocumentContext
-   Import · Dxf · Geometry · InMemory      RevitElementResolver · family builders
+   Walls · Columns · Openings              Walls · Columns · Openings · Import · Common
+   Import · Dxf · Geometry · InMemory      planners (API-free) · writers · type resolvers
 ```
 
 The core is organised **by feature**: every kind of element keeps everything it needs in its own
@@ -28,7 +28,9 @@ own folders. Folders and namespaces match, and every file holds one type.
 | `DxfToRevit.Core.Geometry` | Pure 2D algorithms shared by the features: segments, overlaps, intersections, polygons, tolerances |
 | `DxfToRevit.Core.InMemory` | In-memory host used by tests and simulations |
 | `DxfToRevit.Core.Composition` | Dependency injection registrations |
-| `DxfToRevit.Revit` | Revit adapter: unit conversion, create-argument planners, document context, resolvers |
+| `DxfToRevit.Revit.Walls` / `.Columns` / `.Openings` | Revit side of each feature: argument mappers, API-free type planners, writers, type resolvers, the `I…Creator` adapters |
+| `DxfToRevit.Revit.Import` | The import batch (unit of work), its failure handler, the Revit warning log, the reader of elements already in the model |
+| `DxfToRevit.Revit.Common` | The document context facade, the level resolver, unit conversion, placement, sub-transactions, parameter helpers |
 | `DxfToRevit.Addin` | Ribbon application, commands, settings dialog, module catalog |
 
 A new kind of element (for example floors) is a new feature folder; see @ref import_modules.
@@ -42,8 +44,10 @@ A new kind of element (for example floors) is a new feature folder; see @ref imp
   class: unit conversion (`LengthUnitConverter`), argument mapping (`WallCreateArgsMapper`,
   `ColumnCreateArgsMapper`), level and type selection (`LevelMatchPlanner`, `WallTypeMatchPlanner`,
   `ColumnTypeMatchPlanner`), family file search (`LibraryFileSearch`, `RoundColumnFamilyLocator`)
-  and freeform family naming (`FreeformColumnFamilyNaming`). Only the thin `RevitApiDocumentContext`,
-  `RevitElementResolver`, `RevitColumnPlacement` and `RevitFreeformColumnFamilyBuilder` call the API.
+  and freeform family naming (`FreeformColumnFamilyNaming`). Only the writers (`RevitWallWriter`,
+  `RevitColumnWriter`, `RevitColumnSolidWriter`, `RevitOpeningWriter`), the resolvers (`RevitLevelResolver`,
+  `RevitWallTypeResolver`, `RevitColumnTypeResolver`, `RevitOpeningTypeResolver`), `RevitColumnPlacement`
+  and `RevitFreeformColumnFamilyBuilder` call the API.
 - **Composition over inheritance.** There is no class hierarchy; types are `sealed` and collaborate
   through constructor injection. Parameterless constructors create default collaborators for
   simple callers; `ServiceCollectionExtensions.AddDxfToRevitCore` registers everything for DI.
@@ -57,7 +61,11 @@ A new kind of element (for example floors) is a new feature folder; see @ref imp
     ├── InMemoryWallCreator                    ├── InMemoryColumnCreator
     └── RevitWallCreator ─┐                    └── RevitColumnCreator ─┐
                           └──► IRevitDocumentContext ◄─────────────────┘
-                                   ├── RevitApiDocumentContext (real document)
+                                   ├── RevitApiDocumentContext (real document, a facade)
+                                   │      ├── RevitWallWriter    ── RevitWallTypeResolver
+                                   │      ├── RevitColumnWriter  ── RevitColumnTypeResolver, RevitColumnSolidWriter
+                                   │      ├── RevitOpeningWriter ── RevitOpeningTypeResolver (batch participant)
+                                   │      └── RevitLevelResolver (shared)
                                    └── NullRevitDocumentContext (no document)
 
 BuildingModelService  uses → IWallCreator, IColumnCreator, WallCreationValidator, ColumnCreationValidator

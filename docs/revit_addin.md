@@ -50,7 +50,7 @@ The import is made of modules (walls, columns, openings), see @ref import_module
    not created and are counted in the summary.
 4. `ImportCoordinator.Create`, inside one batch (`RevitImportBatch`, see *Batch writing* below):
    every module creates through `BuildingModelService` and the Revit creators, which delegate to
-   `RevitApiDocumentContext`; the model is regenerated after the walls. The batch is committed
+   `RevitApiDocumentContext`, a facade over one writer per kind of element; the model is regenerated after the walls. The batch is committed
    once, as a single undo step, or rolled back when nothing could be created.
 5. A summary dialog shows, per module, the counts, failures, notes and sections (for example
    opening markers that were not imported or have warnings), plus elements already in the model,
@@ -79,7 +79,7 @@ works outside a batch (it then opens its own transaction).
 Basic Walls are created on the base level with the unconnected height and base offset; with a
 top level, the Top Constraint is set to it. Wall types are found by thickness in the requested
 family (`Basic Wall` by default); when no type matches, a type is duplicated and its widest layer
-resized (`RevitElementResolver.ResolveWallType`).
+resized (`RevitWallTypeResolver`).
 
 ## Deployment
 

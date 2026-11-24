@@ -1,3 +1,5 @@
+using DxfToRevit.Revit.Columns;
+
 namespace DxfToRevit.Revit.Tests.Mapping;
 
 /// <summary>ColumnTypeMatchPlanner: exact type name, family with matching size, or duplicate proposal.</summary>
