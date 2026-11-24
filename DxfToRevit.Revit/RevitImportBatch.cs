@@ -7,11 +7,16 @@ namespace DxfToRevit.Revit;
 /// <param name="Committed">Whether the batch transaction was committed.</param>
 /// <param name="Notes">Notes for created elements by request id (for example a door that cannot flip).</param>
 /// <param name="RemovedElements">Elements Revit could not keep at commit, by element id, with the reason.</param>
+/// <param name="Warnings">Warnings Revit raised at commit (suppressed in the UI), grouped; overlaps first.</param>
 public sealed record RevitBatchResult(
     bool Committed,
     IReadOnlyDictionary<string, string> Notes,
-    IReadOnlyDictionary<string, string> RemovedElements)
+    IReadOnlyDictionary<string, string> RemovedElements,
+    IReadOnlyList<RevitWarningGroup> Warnings)
 {
+    /// <summary>Whether Revit reported overlapping or duplicate elements (for example the drawing imported twice).</summary>
+    public bool HasOverlaps => Warnings.Any(w => w.Kind == RevitWarningKind.Overlap);
+
     /// <summary>Whether the element with this id was removed at commit, and why.</summary>
     /// <param name="elementId">Element id as returned in a creation result.</param>
     /// <param name="reason">Revit's failure text.</param>
@@ -78,7 +83,8 @@ public sealed class RevitImportBatch : IDisposable
         _finished = true;
         _context.EndBatch(this);
 
-        return new RevitBatchResult(status == TransactionStatus.Committed, notes, _failures.RemovedElements);
+        return new RevitBatchResult(
+            status == TransactionStatus.Committed, notes, _failures.RemovedElements, _failures.Warnings.Groups);
     }
 
     /// <summary>Rolls back an uncommitted batch.</summary>
@@ -94,16 +100,29 @@ public sealed class RevitImportBatch : IDisposable
 }
 
 /// <summary>
-/// Failure preprocessor of an import batch: deletes warnings (so Revit shows no dialog for each
-/// element) and resolves errors by their current (default) resolution, or else by deleting the failing
-/// elements, recording which elements were removed and why.
+/// Failure preprocessor of an import batch: records and deletes warnings (so Revit shows no dialog
+/// for each element; the summary lists them, overlaps first) and resolves errors by their current
+/// (default) resolution, or else by deleting the failing elements, recording which elements were
+/// removed and why.
 /// </summary>
 internal sealed class RevitBatchFailureHandler : IFailuresPreprocessor
 {
+    /// <summary>Warnings that mean new elements overlap or duplicate existing ones.</summary>
+    private static readonly FailureDefinitionId[] OverlapWarnings =
+    {
+        BuiltInFailures.OverlapFailures.WallsOverlap,
+        BuiltInFailures.OverlapFailures.DuplicateInstances,
+        BuiltInFailures.OverlapFailures.FloorsOverlap,
+        BuiltInFailures.OverlapFailures.OverlappingElementsTest
+    };
+
     private readonly Dictionary<string, string> _removed = new(StringComparer.Ordinal);
 
     /// <summary>Elements deleted to resolve errors, by element id.</summary>
     public IReadOnlyDictionary<string, string> RemovedElements => _removed;
+
+    /// <summary>Warnings raised at commit, before they were deleted.</summary>
+    public RevitWarningLog Warnings { get; } = new();
 
     /// <inheritdoc />
     public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor)
@@ -113,6 +132,12 @@ internal sealed class RevitBatchFailureHandler : IFailuresPreprocessor
         {
             if (failure.GetSeverity() == FailureSeverity.Warning)
             {
+                FailureDefinitionId id = failure.GetFailureDefinitionId();
+                RevitWarningKind kind = OverlapWarnings.Any(o => o.Guid == id.Guid)
+                    ? RevitWarningKind.Overlap
+                    : RevitWarningKind.Other;
+                Warnings.Add(kind, failure.GetDescriptionText(),
+                    failure.GetFailingElementIds().Select(e => e.Value.ToString()));
                 failuresAccessor.DeleteWarning(failure);
                 continue;
             }
