@@ -1,3 +1,4 @@
+using DxfToRevit.Addin.Settings;
 using DxfToRevit.Core.Columns;
 using DxfToRevit.Core.Dxf;
 using DxfToRevit.Core.Import;
@@ -5,7 +6,6 @@ using DxfToRevit.Core.Openings;
 using DxfToRevit.Core.Walls;
 using DxfToRevit.Revit.Columns;
 using DxfToRevit.Revit.Common;
-using DxfToRevit.Revit.Import;
 using DxfToRevit.Revit.Openings;
 using DxfToRevit.Revit.Walls;
 
@@ -33,6 +33,30 @@ internal static class ImportModuleCatalog
             new ColumnImportModule(service),
             new OpeningImportModule(service)
         };
+    }
+
+    /// <summary>
+    /// The settings sections of the modules, in display order (the level section is added by the
+    /// dialog itself). A module with options adds its section here.
+    /// </summary>
+    /// <param name="settings">Session settings the sections read and write.</param>
+    /// <param name="drawing">Analysed DXF; <c>null</c> when the dialog is opened without a DXF.</param>
+    public static IReadOnlyList<IImportSettingsSection> CreateSettingsSections(ImportSettings settings, DxfDrawing? drawing) =>
+        new IImportSettingsSection[]
+        {
+            new ColumnSettingsSection(settings.Columns),
+            new OpeningSettingsSection(settings.Openings,
+                drawing is null ? Array.Empty<OpeningCodeUsage>() : OpeningCodeSummary.Build(drawing.Analysis.Openings))
+        };
+
+    /// <summary>The options of the modules for the session settings (<see cref="ImportPlanContext.Options"/>).</summary>
+    /// <param name="settings">Session settings.</param>
+    public static ImportBag CreateModuleOptions(ImportSettings settings)
+    {
+        var options = new ImportBag();
+        options.Set(settings.Columns.ToOptions());
+        options.Set(settings.Openings.ToOptions());
+        return options;
     }
 
     /// <summary>The category check boxes of the settings dialog, with the counts of <paramref name="drawing"/>.</summary>

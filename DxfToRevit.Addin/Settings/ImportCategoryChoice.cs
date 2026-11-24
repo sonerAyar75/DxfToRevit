@@ -1,6 +1,6 @@
 using DxfToRevit.Core.Import;
 
-namespace DxfToRevit.Addin;
+namespace DxfToRevit.Addin.Settings;
 
 /// <summary>A category check box of the import settings: the category and how many the DXF contains.</summary>
 /// <param name="Category">Import category of a module.</param>

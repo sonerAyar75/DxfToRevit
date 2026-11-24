@@ -1,11 +1,7 @@
 #if REVIT_API_AVAILABLE
 using Autodesk.Revit.DB;
 using DxfToRevit.Core.Columns;
-using DxfToRevit.Revit.Columns;
 using DxfToRevit.Revit.Common;
-using DxfToRevit.Revit.Import;
-using DxfToRevit.Revit.Openings;
-using DxfToRevit.Revit.Walls;
 using System.IO;
 
 namespace DxfToRevit.Revit.Columns;

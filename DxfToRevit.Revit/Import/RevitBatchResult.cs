@@ -1,11 +1,5 @@
 #if REVIT_API_AVAILABLE
 
-using DxfToRevit.Revit.Columns;
-using DxfToRevit.Revit.Common;
-using DxfToRevit.Revit.Import;
-using DxfToRevit.Revit.Openings;
-using DxfToRevit.Revit.Walls;
-
 namespace DxfToRevit.Revit.Import;
 
 /// <summary>Outcome of <see cref="RevitImportBatch.Commit"/>.</summary>

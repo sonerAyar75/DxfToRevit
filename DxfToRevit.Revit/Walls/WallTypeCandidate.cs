@@ -1,9 +1,3 @@
-using DxfToRevit.Revit.Columns;
-using DxfToRevit.Revit.Common;
-using DxfToRevit.Revit.Import;
-using DxfToRevit.Revit.Openings;
-using DxfToRevit.Revit.Walls;
-
 namespace DxfToRevit.Revit.Walls;
 
 /// <summary>API-free summary of a Revit wall type used by <see cref="WallTypeMatchPlanner"/>.</summary>

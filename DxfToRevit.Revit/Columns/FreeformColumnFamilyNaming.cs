@@ -1,8 +1,3 @@
-using DxfToRevit.Revit.Columns;
-using DxfToRevit.Revit.Common;
-using DxfToRevit.Revit.Import;
-using DxfToRevit.Revit.Openings;
-using DxfToRevit.Revit.Walls;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;

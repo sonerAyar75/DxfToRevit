@@ -60,13 +60,19 @@ For example floors drawn as closed polylines on a `FLOOR-<cm>` layer:
 3. **Module**: a class implementing `IImportModule` with its category (`new ImportCategory("floors",
    "Floors")`), an `Order` (after the walls, for example 150), `CountInDrawing`, `Plan` (build the
    requests, use `ExistingElementMatcher` to skip floors already in the model) and `Create`.
-4. **Register** it in `ImportModuleCatalog.Create`.
-5. **Test** it with `ImportCoordinator` and the in-memory creator.
+4. **Settings**, when the module has options: a `FloorImportSettings` class in Core with a
+   `ToOptions()` method (like `ColumnImportSettings`), a property on `ImportSettings`, and an
+   `IImportSettingsSection` in the add-in (like `ColumnSettingsSection`) that builds its group box,
+   disables it when floors are not chosen, checks the choices and stores them.
+5. **Register** the module in `ImportModuleCatalog.Create`, its section in
+   `ImportModuleCatalog.CreateSettingsSections` and its options in
+   `ImportModuleCatalog.CreateModuleOptions`.
+6. **Test** it with `ImportCoordinator` and the in-memory creator, and its settings with `ToOptions`.
 
 The settings dialog shows its check box with the count found in the DXF, the choice is remembered
-for the session (`ImportSelectionPreferences`, by category key), and the summary lists what it
-created, what failed and its notes. Module-specific settings (like the column options) are passed
-through `ImportPlanContext.Options`.
+for the session (`ImportSelectionSettings`, by category key), and the summary lists what it
+created, what failed and its notes. Module options reach the module through
+`ImportPlanContext.Options`.
 
 A drawing of another kind (for example a section for roofs by extrusion) is a separate command on
 the ribbon with its own analysis, but it can reuse the coordinator and the module pattern.

@@ -1,11 +1,8 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using DxfToRevit.Revit.Columns;
+using DxfToRevit.Addin.Settings;
 using DxfToRevit.Revit.Common;
-using DxfToRevit.Revit.Import;
-using DxfToRevit.Revit.Openings;
-using DxfToRevit.Revit.Walls;
 using System.Windows.Forms;
 
 namespace DxfToRevit.Addin;
@@ -32,8 +29,11 @@ public sealed class SettingsCommand : IExternalCommand
         }
 
         var context = new RevitApiDocumentContext(document);
+        ImportSettings settings = ImportSettings.Session;
         using var form = new ImportSettingsForm(
-            document, ImportModuleCatalog.Choices(ImportModuleCatalog.Create(context), drawing: null));
+            settings, document,
+            ImportModuleCatalog.Choices(ImportModuleCatalog.Create(context), drawing: null),
+            ImportModuleCatalog.CreateSettingsSections(settings, drawing: null));
         return form.ShowDialog() == DialogResult.OK ? Result.Succeeded : Result.Cancelled;
     }
 }

@@ -38,6 +38,7 @@ DxfToRevit builds the Revit model from it.
 | 18 | Mixed folder conventions, several types per file, outdated names | Folders and namespaces by feature, one type per file, sorted usings | (structure only) |
 | 19 | One Revit class created every element and another resolved every type | A facade over one writer and one type resolver per kind of element; batch participants | `RevitWallWriter`, `RevitColumnWriter`, `RevitOpeningWriter`, `IRevitBatchParticipant` |
 | 20 | New modules had to extend the analysis result; wall and column layer names were fixed in code | Modules get the drawing (document + analysis); layer rules are data | `DxfDrawing`, `LayerRules`, `WallLayerRule`, `ColumnLayerRule` |
+| 21 | The settings dialog drew every module; choices were global static state | Settings sections per module (Composite); one session settings object; choice → option rules in the core, tested | `IImportSettingsSection`, `ImportSettings`, `ColumnImportSettings` |
 
 ## Classes by need (short)
 
@@ -459,6 +460,32 @@ and make the layer rules data. No behaviour changes with the defaults.
   the line classifier, the wall models and the column reader. A layer mapping file for other office
   standards can now be added without changing the analysis.
 
+## Stage 21 - Settings by module, no global preferences
+
+**Requirement.** The settings dialog (about 840 lines) drew the options of every module itself,
+so a new module meant editing it. Choices were kept in three static classes
+(`ImportSelectionPreferences`, `ColumnImportPreferences`, `OpeningImportPreferences`) read and
+written from anywhere, and the rules that turn them into module options (for example "round solids
+→ the DirectShape key") lived in the import command, untested.
+
+**Decision.** Each module brings its own section; choices live in one settings object that is
+passed around; the choice → option rules move to the core and are tested. The dialog looks and
+behaves as before.
+
+- Core: `ImportSelectionSettings`, `ColumnImportSettings` (with `CircularColumnMode`) and
+  `OpeningImportSettings`, each with `ToOptions()` (and `CreateRegistry()` for the opening heights);
+  covered by `ImportSettingsTests`.
+- Add-in: `ImportSettings` groups them; `ImportSettings.Session` is the one instance kept for the
+  Revit session and is passed to the dialogs and commands (no other global state).
+- `IImportSettingsSection` (Composite): `CreateControls`, `Refresh` (the chosen categories changed),
+  `Confirm` (checks, may ask the user), `Save`. `LevelSettingsSection`, `ColumnSettingsSection` and
+  `OpeningSettingsSection` hold what the dialog did before; `ImportSettingsForm` only shows the
+  Import group, arranges the sections and runs their checks.
+- `ImportModuleCatalog` now registers, for each module, its settings section
+  (`CreateSettingsSections`) and its options (`CreateModuleOptions`), next to the module itself.
+- On *Continue* the column checks now run before the door and window check (the sections are
+  checked in display order); otherwise the dialog behaves as before.
+
 ---
 
 # Part 3 - Class reference by need
@@ -576,4 +603,5 @@ the generated API reference.
 | `SettingsCommand`, `AboutCommand` | Settings without importing; about box | `Execute` |
 | `ImportSettingsForm` | Categories to import, levels, column modes, DXF summary | `IncludedCategoryKeys`, `SkipExisting`, `SelectedBaseLevelName`, … |
 | `OpeningTypeMapForm` | Map DXF codes to Revit types, default heights | right-click type menu, load/save file |
-| `ColumnImportPreferences`, `OpeningImportPreferences` | Remember choices for the Revit session | `CreateRegistry()` |
+| `ImportSettings`, `ImportSelectionSettings`, `ColumnImportSettings`, `OpeningImportSettings` | Remember choices for the Revit session; turn them into module options | `ToOptions()`, `CreateRegistry()` |
+| `IImportSettingsSection`, `LevelSettingsSection`, `ColumnSettingsSection`, `OpeningSettingsSection` | One part of the settings dialog each; the dialog arranges them | `CreateControls`, `Refresh`, `Confirm`, `Save` |

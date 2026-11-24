@@ -2,9 +2,9 @@ using DxfToRevit.Core.Columns;
 using DxfToRevit.Core.Dxf;
 using DxfToRevit.Core.Openings;
 using DxfToRevit.Core.Walls;
-using netDxf;
 using netDxf.Entities;
 using netDxf.Tables;
+using netDxf;
 
 namespace DxfToRevit.Tests.Dxf;
 

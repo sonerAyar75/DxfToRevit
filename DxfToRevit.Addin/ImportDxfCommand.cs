@@ -1,15 +1,11 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using DxfToRevit.Core.Columns;
+using DxfToRevit.Addin.Settings;
 using DxfToRevit.Core.Dxf;
 using DxfToRevit.Core.Import;
-using DxfToRevit.Core.Openings;
-using DxfToRevit.Revit.Columns;
 using DxfToRevit.Revit.Common;
 using DxfToRevit.Revit.Import;
-using DxfToRevit.Revit.Openings;
-using DxfToRevit.Revit.Walls;
 using System.Text;
 
 namespace DxfToRevit.Addin;
@@ -53,8 +49,9 @@ public sealed class ImportDxfCommand : IExternalCommand
         if (path is null)
             return Result.Cancelled;
 
-        (double, double, double, double) heightsUsed = CurrentDefaultHeights();
-        if (!TryAnalyze(path, out DxfDrawing drawing, ref message))
+        ImportSettings settings = ImportSettings.Session;
+        var heightsUsed = settings.Openings.DefaultHeights;
+        if (!TryAnalyze(path, settings, out DxfDrawing drawing, ref message))
             return Result.Failed;
 
         var context = new RevitApiDocumentContext(doc);
@@ -70,34 +67,23 @@ public sealed class ImportDxfCommand : IExternalCommand
         }
 
         using var settingsForm = new ImportSettingsForm(
-            doc, choices, System.IO.Path.GetFileName(path), OpeningCodeSummary.Build(drawing.Analysis.Openings));
+            settings, doc, choices, ImportModuleCatalog.CreateSettingsSections(settings, drawing),
+            System.IO.Path.GetFileName(path));
         if (settingsForm.ShowDialog() != System.Windows.Forms.DialogResult.OK)
             return Result.Cancelled;
 
         // Default heights only matter for blocks without height attributes; re-read when they changed.
-        if (CurrentDefaultHeights() != heightsUsed && !TryAnalyze(path, out drawing, ref message))
+        if (settings.Openings.DefaultHeights != heightsUsed && !TryAnalyze(path, settings, out drawing, ref message))
             return Result.Failed;
 
         var session = new ImportSessionOptions(
-            baseLevelName: settingsForm.SelectedBaseLevelName,
-            defaultHeightMm: settingsForm.UnconnectedHeightMm,
+            baseLevelName: settingsForm.Levels.SelectedBaseLevelName,
+            defaultHeightMm: settingsForm.Levels.UnconnectedHeightMm,
             defaultColumnTypeKey: RectangularColumnFamily,
             columnsAreStructural: false,
-            topLevelName: settingsForm.SelectedTopLevelName);
+            topLevelName: settingsForm.Levels.SelectedTopLevelName);
 
-        var options = new ImportBag();
-        options.Set(new ColumnImportOptions
-        {
-            CircularTypeKey = settingsForm.UseRoundSolidForCircularColumns
-                ? ColumnTypeKeys.RoundDirectShape
-                : settingsForm.SelectedCircularTypeKey ?? ColumnTypeKeys.AutoRoundFamily,
-            ConvertCircularToSquare = settingsForm.UseSquareForCircularColumns,
-            SquareTypeKey = settingsForm.SelectedSquareTypeKey,
-            FreeformTypeKey = settingsForm.FreeformAsFamily ? ColumnTypeKeys.FreeformFamily : "Freeform Column",
-            IncludeCircular = settingsForm.IncludeCircularColumns,
-            IncludeFreeform = settingsForm.IncludeFreeformColumns
-        });
-        options.Set(new OpeningImportOptions(OpeningImportPreferences.TypeMap));
+        ImportBag options = ImportModuleCatalog.CreateModuleOptions(settings);
 
         // Compute first: every module builds its requests and sets aside what is already in the
         // model (existing walls also host the new doors and windows). Nothing is written yet.
@@ -144,11 +130,11 @@ public sealed class ImportDxfCommand : IExternalCommand
     }
 
     /// <summary>Runs the pipeline analysis with the current opening defaults; sets <paramref name="message"/> on failure.</summary>
-    private static bool TryAnalyze(string path, out DxfDrawing result, ref string message)
+    private static bool TryAnalyze(string path, ImportSettings settings, out DxfDrawing result, ref string message)
     {
         try
         {
-            result = new DxfCenterLinePipeline(OpeningImportPreferences.CreateRegistry(), LayerRules.Default).AnalyzeDrawing(path);
+            result = new DxfCenterLinePipeline(settings.Openings.CreateRegistry(), LayerRules.Default).AnalyzeDrawing(path);
             return true;
         }
         catch (Exception ex)
@@ -158,11 +144,6 @@ public sealed class ImportDxfCommand : IExternalCommand
             return false;
         }
     }
-
-    /// <summary>The default opening heights currently chosen (door, window, sill, empty opening; cm).</summary>
-    private static (double, double, double, double) CurrentDefaultHeights() =>
-        (OpeningImportPreferences.DoorHeightCm, OpeningImportPreferences.WindowHeightCm,
-         OpeningImportPreferences.WindowSillCm, OpeningImportPreferences.EmptyOpeningHeightCm);
 
     /// <summary>Asks the user for a DXF file; returns <c>null</c> when cancelled.</summary>
     private static string? PickDxf()

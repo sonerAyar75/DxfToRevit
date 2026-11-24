@@ -1,13 +1,9 @@
 using DxfToRevit.Core.Openings;
-using DxfToRevit.Revit.Columns;
-using DxfToRevit.Revit.Common;
-using DxfToRevit.Revit.Import;
 using DxfToRevit.Revit.Openings;
-using DxfToRevit.Revit.Walls;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace DxfToRevit.Addin;
+namespace DxfToRevit.Addin.Settings;
 
 /// <summary>
 /// Editor of the opening type map. When a DXF is loaded, every door and window <c>TYPE</c> code
@@ -29,6 +25,7 @@ internal sealed class OpeningTypeMapForm : Form
     private readonly IReadOnlyList<string> _doorTypes;
     private readonly IReadOnlyList<string> _windowTypes;
     private readonly IReadOnlyList<OpeningCodeUsage> _usages;
+    private readonly OpeningImportSettings _settings;
     private readonly DataGridView _grid = new()
     {
         Width = 820,
@@ -64,13 +61,18 @@ internal sealed class OpeningTypeMapForm : Form
     /// <summary>Default empty opening height in centimetres.</summary>
     public double EmptyOpeningHeightCm => (double)_openingHeight.Value;
 
-    /// <summary>Builds the dialog with the current preferences.</summary>
+    /// <summary>Builds the dialog from the session opening settings.</summary>
+    /// <param name="settings">Session opening settings: the type map, the heights and the last map file.</param>
     /// <param name="doorTypes">Loaded door types as <c>Family::Type</c> keys.</param>
     /// <param name="windowTypes">Loaded window types as <c>Family::Type</c> keys.</param>
     /// <param name="usages">Codes found in the loaded DXF; empty when no DXF is loaded.</param>
     public OpeningTypeMapForm(
-        IReadOnlyList<string> doorTypes, IReadOnlyList<string> windowTypes, IReadOnlyList<OpeningCodeUsage> usages)
+        OpeningImportSettings settings,
+        IReadOnlyList<string> doorTypes,
+        IReadOnlyList<string> windowTypes,
+        IReadOnlyList<OpeningCodeUsage> usages)
     {
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _doorTypes = doorTypes ?? throw new ArgumentNullException(nameof(doorTypes));
         _windowTypes = windowTypes ?? throw new ArgumentNullException(nameof(windowTypes));
         _usages = usages ?? throw new ArgumentNullException(nameof(usages));
@@ -173,11 +175,11 @@ internal sealed class OpeningTypeMapForm : Form
         AcceptButton = ok;
         CancelButton = cancel;
 
-        _doorHeight.Value = ClampCm(_doorHeight, OpeningImportPreferences.DoorHeightCm);
-        _windowHeight.Value = ClampCm(_windowHeight, OpeningImportPreferences.WindowHeightCm);
-        _windowSill.Value = ClampCm(_windowSill, OpeningImportPreferences.WindowSillCm);
-        _openingHeight.Value = ClampCm(_openingHeight, OpeningImportPreferences.EmptyOpeningHeightCm);
-        FillRows(OpeningImportPreferences.TypeMap);
+        _doorHeight.Value = ClampCm(_doorHeight, _settings.DoorHeightCm);
+        _windowHeight.Value = ClampCm(_windowHeight, _settings.WindowHeightCm);
+        _windowSill.Value = ClampCm(_windowSill, _settings.WindowSillCm);
+        _openingHeight.Value = ClampCm(_openingHeight, _settings.EmptyOpeningHeightCm);
+        FillRows(_settings.TypeMap);
 
         FormClosing += (_, e) =>
         {
@@ -419,7 +421,7 @@ internal sealed class OpeningTypeMapForm : Form
             Title = "Load opening type map",
             Filter = "Type map files (*.txt;*.csv)|*.txt;*.csv|All files (*.*)|*.*",
             CheckFileExists = true,
-            FileName = OpeningImportPreferences.TypeMapFilePath ?? string.Empty
+            FileName = _settings.TypeMapFilePath ?? string.Empty
         };
 
         if (dialog.ShowDialog(this) != DialogResult.OK)
@@ -429,7 +431,7 @@ internal sealed class OpeningTypeMapForm : Form
         {
             OpeningTypeMapReadResult result = OpeningTypeMapFile.Read(dialog.FileName);
             FillRows(result.Map);
-            OpeningImportPreferences.TypeMapFilePath = dialog.FileName;
+            _settings.TypeMapFilePath = dialog.FileName;
 
             if (result.Errors.Count > 0)
             {
@@ -459,7 +461,7 @@ internal sealed class OpeningTypeMapForm : Form
         {
             Title = "Save opening type map",
             Filter = "Type map files (*.txt)|*.txt|CSV files (*.csv)|*.csv|All files (*.*)|*.*",
-            FileName = OpeningImportPreferences.TypeMapFilePath ?? "OpeningTypes.txt"
+            FileName = _settings.TypeMapFilePath ?? "OpeningTypes.txt"
         };
 
         if (dialog.ShowDialog(this) != DialogResult.OK)
@@ -468,7 +470,7 @@ internal sealed class OpeningTypeMapForm : Form
         try
         {
             OpeningTypeMapFile.Write(dialog.FileName, map);
-            OpeningImportPreferences.TypeMapFilePath = dialog.FileName;
+            _settings.TypeMapFilePath = dialog.FileName;
         }
         catch (Exception ex)
         {
