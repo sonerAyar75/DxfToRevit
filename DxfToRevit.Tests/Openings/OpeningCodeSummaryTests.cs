@@ -39,11 +39,11 @@ public sealed class OpeningCodeSummaryTests
     }
 
     /// <summary>
-    /// The editor lists the DXF door/window codes first (with their mapped types), then the other
-    /// map rows; empty openings are not listed because they need no type.
+    /// The editor lists only the DXF door/window codes, with their mapped types; map entries of other
+    /// codes and empty openings are not listed.
     /// </summary>
     [Fact]
-    public void Rows_ListDxfCodesFirstThenOtherMapEntries()
+    public void Rows_ListOnlyDxfCodes()
     {
         var map = new OpeningTypeMap(new[]
         {
@@ -55,11 +55,59 @@ public sealed class OpeningCodeSummaryTests
         IReadOnlyList<OpeningTypeMapRow> rows = OpeningTypeMapRows.Build(map, OpeningCodeSummary.Build(Openings()));
 
         Assert.Equal(
-            new[] { "Door|2|F::Two|2", "Door|10||1", "Window|A||1", "Door|*|F::Default|0", "Window|Z|W::Zed|0" },
+            new[] { "Door|2|F::Two|2", "Door|10||1", "Window|A||1" },
             rows.Select(r => $"{r.Category}|{r.Code}|{r.TypeKey}|{r.CountInDxf}"));
-        Assert.True(rows[0].FromDxf);
-        Assert.False(rows[3].FromDxf);
+        Assert.All(rows, r => Assert.True(r.FromDxf));
         Assert.Equal("900x2100", rows[0].Sizes);
+    }
+
+    /// <summary>Without a DXF the editor has no rows.</summary>
+    [Fact]
+    public void Rows_NoDxf_AreEmpty()
+    {
+        var map = new OpeningTypeMap(new[] { new OpeningTypeMapEntry(OpeningCategory.Door, "*", "F::Default") });
+
+        Assert.Empty(OpeningTypeMapRows.Build(map, Array.Empty<OpeningCodeUsage>()));
+    }
+
+    /// <summary>Blocks without a TYPE attribute are listed with the <c>*</c> entry, which is what resolves them.</summary>
+    [Fact]
+    public void Rows_NoTypeCode_ShowsDefaultEntry()
+    {
+        var map = new OpeningTypeMap(new[] { new OpeningTypeMapEntry(OpeningCategory.Window, "*", "W::Default") });
+        var usages = new[] { new OpeningCodeUsage(OpeningCategory.Window, "", 2, new[] { "1200x1500" }) };
+
+        OpeningTypeMapRow row = Assert.Single(OpeningTypeMapRows.Build(map, usages));
+
+        Assert.Equal("W::Default", row.TypeKey);
+        Assert.Equal("*", OpeningTypeMapRows.MapCode(row.Code));
+    }
+
+    /// <summary>
+    /// Editing keeps the entries of codes that are not in the DXF and replaces the listed ones; a
+    /// listed row left empty removes its entry.
+    /// </summary>
+    [Fact]
+    public void Merge_KeepsUnlistedEntriesAndReplacesListedOnes()
+    {
+        var previous = new OpeningTypeMap(new[]
+        {
+            new OpeningTypeMapEntry(OpeningCategory.Door, "2", "F::Old"),
+            new OpeningTypeMapEntry(OpeningCategory.Door, "10", "F::Ten"),
+            new OpeningTypeMapEntry(OpeningCategory.Window, "Z", "W::Zed")
+        });
+        var usages = new[]
+        {
+            new OpeningCodeUsage(OpeningCategory.Door, "2", 1, Array.Empty<string>()),
+            new OpeningCodeUsage(OpeningCategory.Door, "10", 1, Array.Empty<string>())
+        };
+
+        OpeningTypeMap merged = OpeningTypeMapRows.Merge(previous, usages,
+            new[] { new OpeningTypeMapEntry(OpeningCategory.Door, "2", "F::New") });
+
+        Assert.Equal("F::New", merged.Resolve(OpeningCategory.Door, "2"));
+        Assert.Null(merged.Resolve(OpeningCategory.Door, "10"));
+        Assert.Equal("W::Zed", merged.Resolve(OpeningCategory.Window, "Z"));
     }
 
     /// <summary>A code is unmapped only when neither its own row nor the <c>*</c> row of its category gives a type.</summary>

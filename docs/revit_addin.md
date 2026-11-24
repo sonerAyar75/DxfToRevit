@@ -57,7 +57,7 @@ is the document changed, in one transaction:
 | Walls, columns, openings | Each element (and each new type) is written in its own `SubTransaction` (`RevitChangeScope`), so a failing element still rolls back alone |
 | `RevitImportBatch.Regenerate` | Once after the walls, so columns join and openings find their hosts |
 | Door flips | Collected while placing doors and applied together: one regeneration for all facings, one for all hands |
-| `RevitImportBatch.Commit` | One commit: Revit regenerates and redraws once. Warnings are suppressed; elements that cause errors are deleted and reported as failures with Revit's reason |
+| `RevitImportBatch.Commit` | One commit: Revit regenerates and redraws once. Warnings are not shown one by one: `RevitWarningLog` collects them and the summary lists them grouped, overlaps first (overlapping walls, identical instances: usually the same drawing imported twice). Elements that cause errors are deleted and reported as failures with Revit's reason |
 
 Before, every element committed its own transaction, so Revit regenerated the model and redrew the
 view after each one; that per-element commit made the import slow. The same element code still

@@ -31,7 +31,7 @@ internal sealed class OpeningTypeMapForm : Form
     {
         Width = 820,
         Height = 300,
-        AllowUserToAddRows = true,
+        AllowUserToAddRows = false,
         AllowUserToDeleteRows = true,
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
         SelectionMode = DataGridViewSelectionMode.CellSelect,
@@ -39,6 +39,9 @@ internal sealed class OpeningTypeMapForm : Form
     };
 
     private readonly ContextMenuStrip _typeMenu = new();
+
+    /// <summary>Map the rows were filled from; keeps the entries of codes not in this DXF.</summary>
+    private OpeningTypeMap _baseMap = OpeningTypeMap.Empty;
     private readonly NumericUpDown _doorHeight = CreateCmInput(1);
     private readonly NumericUpDown _windowHeight = CreateCmInput(1);
     private readonly NumericUpDown _windowSill = CreateCmInput(0);
@@ -85,9 +88,9 @@ internal sealed class OpeningTypeMapForm : Form
         {
             Text = (_usages.Count > 0
                        ? $"The DXF contains {dxfOpenings} opening(s). Each door and window TYPE code found in it is listed below.\n"
-                       : "No DXF is loaded: only the saved rows are listed. Use Import DXF to list the codes of a drawing.\n") +
+                       : "No DXF is loaded: the codes are listed when a drawing is chosen in Import DXF.\n") +
                    "Right-click (or double-click) a Revit type cell to pick from the loaded types.\n" +
-                   "Code * applies to every code without its own type. When the DXF size differs, the type is duplicated and resized.",
+                   "When the DXF size differs, the type is duplicated and resized.",
             AutoSize = true,
             Margin = new Padding(0, 0, 0, 8)
         };
@@ -104,11 +107,6 @@ internal sealed class OpeningTypeMapForm : Form
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "In DXF", FillWeight = 8, ReadOnly = true });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Sizes in DXF (mm)", FillWeight = 22, ReadOnly = true });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Revit type (Family::Type)", FillWeight = 46 });
-        _grid.DefaultValuesNeeded += (_, e) =>
-        {
-            e.Row.Cells[CategoryColumn].Value = nameof(OpeningCategory.Door);
-            e.Row.Cells[CodeColumn].Value = OpeningTypeMap.DefaultCode;
-        };
         _grid.CellMouseDown += OnCellMouseDown;
         _grid.CellDoubleClick += (_, e) =>
         {
@@ -117,15 +115,13 @@ internal sealed class OpeningTypeMapForm : Form
         };
         _grid.CellFormatting += OnCellFormatting;
         _grid.CellPainting += OnCellPainting;
-        _grid.CellValueChanged += (_, _) => _grid.Invalidate(); // a changed * row changes the hints
+        _grid.CellValueChanged += (_, _) => _grid.Invalidate(); // a changed (no TYPE) row changes the hints
         _grid.UserDeletingRow += (_, e) =>
         {
-            // DXF rows stay in the list; clear their type instead.
-            if (e.Row?.Tag is OpeningTypeMapRow { FromDxf: true })
-            {
+            // The rows are the codes of the drawing: deleting one only clears its type.
+            if (e.Row is not null)
                 e.Row.Cells[TypeColumn].Value = string.Empty;
-                e.Cancel = true;
-            }
+            e.Cancel = true;
         };
         _grid.DataError += (_, e) => e.ThrowException = false;
 
@@ -212,9 +208,10 @@ internal sealed class OpeningTypeMapForm : Form
         string.Join("\n", usages.Select(u =>
             $"  {u.Category} {(u.Code.Length == 0 ? NoCodeText : u.Code)} ({u.Count} pcs)"));
 
-    /// <summary>Replaces the grid rows: the DXF codes first, then the other rows of <paramref name="map"/>.</summary>
+    /// <summary>Replaces the grid rows: one row per door and window code of the DXF, typed from <paramref name="map"/>.</summary>
     private void FillRows(OpeningTypeMap map)
     {
+        _baseMap = map;
         _grid.Rows.Clear();
         foreach (OpeningTypeMapRow row in OpeningTypeMapRows.Build(map, _usages))
         {
@@ -227,28 +224,18 @@ internal sealed class OpeningTypeMapForm : Form
 
             DataGridViewRow gridRow = _grid.Rows[index];
             gridRow.Tag = row;
-            if (row.FromDxf)
-            {
-                // Category and code come from the drawing.
-                gridRow.Cells[CategoryColumn].ReadOnly = true;
-                gridRow.Cells[CodeColumn].ReadOnly = true;
-                gridRow.Cells[CategoryColumn].Style.BackColor = SystemColors.Control;
-                gridRow.Cells[CodeColumn].Style.BackColor = SystemColors.Control;
-            }
-
-            if (row.Code.Length == 0)
-            {
-                // Blocks without a TYPE attribute can only use the * row.
-                gridRow.Cells[TypeColumn].ReadOnly = true;
-                gridRow.Cells[TypeColumn].Style.BackColor = SystemColors.Control;
-                gridRow.Cells[TypeColumn].ToolTipText = "Blocks without a TYPE attribute use the * row of their category.";
-            }
+            // The rows are the codes of the drawing: only the Revit type is edited.
+            gridRow.Cells[CategoryColumn].ReadOnly = true;
+            gridRow.Cells[CodeColumn].ReadOnly = true;
+            gridRow.Cells[CategoryColumn].Style.BackColor = SystemColors.Control;
+            gridRow.Cells[CodeColumn].Style.BackColor = SystemColors.Control;
         }
     }
 
     /// <summary>
-    /// Reads the rows into a map. Rows without a Revit type are skipped; a typed row needs a code
-    /// and a door or window category.
+    /// Reads the rows into a map, merged with the entries of the codes that are not listed (see
+    /// <see cref="OpeningTypeMapRows.Merge"/>). Rows without a Revit type are skipped; a
+    /// <c>(no TYPE)</c> row is stored as the <c>*</c> entry of its category.
     /// </summary>
     private bool TryReadMap(out OpeningTypeMap map, out string? error)
     {
@@ -276,22 +263,16 @@ internal sealed class OpeningTypeMapForm : Form
                 return false;
             }
 
-            if (code.Length == 0)
-            {
-                error = $"Row {line}: enter the TYPE code (or * for all other codes).";
-                return false;
-            }
-
             if (!OpeningTypeKey.TryParse(type, out _))
             {
                 error = $"Row {line}: choose a Revit type (right-click the cell).";
                 return false;
             }
 
-            entries.Add(new OpeningTypeMapEntry(category, code, type));
+            entries.Add(new OpeningTypeMapEntry(category, OpeningTypeMapRows.MapCode(code), type));
         }
 
-        map = new OpeningTypeMap(entries);
+        map = OpeningTypeMapRows.Merge(_baseMap, _usages, entries);
         return true;
     }
 
@@ -311,14 +292,11 @@ internal sealed class OpeningTypeMapForm : Form
 
     /// <summary>
     /// Shows the loaded types of the row's category, grouped by family; choosing one writes its key
-    /// into the cell. On the new-row line a row is created first.
+    /// into the cell.
     /// </summary>
     private void ShowTypeMenu(int rowIndex, Point location)
     {
         _grid.EndEdit();
-        if (_grid.Rows[rowIndex].IsNewRow)
-            rowIndex = _grid.Rows.Add(nameof(OpeningCategory.Door), OpeningTypeMap.DefaultCode, string.Empty, string.Empty, string.Empty);
-
         DataGridViewRow row = _grid.Rows[rowIndex];
         if (row.Cells[TypeColumn].ReadOnly)
             return;
@@ -387,7 +365,7 @@ internal sealed class OpeningTypeMapForm : Form
     }
 
     /// <summary>
-    /// Paints a hint in the empty type cell of a DXF row: the <c>*</c> type it falls back to (grey),
+    /// Paints a hint in the empty type cell of a DXF row: the default type it falls back to (grey),
     /// or that it is not mapped (red). Only painted, so the cell value stays empty while editing.
     /// </summary>
     private void OnCellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
@@ -402,7 +380,7 @@ internal sealed class OpeningTypeMapForm : Form
             return;
 
         string? fallback = FindDefaultType(IsWindowRow(row) ? OpeningCategory.Window : OpeningCategory.Door);
-        string hint = fallback is null ? "(not mapped - right-click to choose)" : $"(* {fallback})";
+        string hint = fallback is null ? "(not mapped - right-click to choose)" : $"(default: {fallback})";
         Color color = fallback is null ? Color.Firebrick : SystemColors.GrayText;
 
         e.Paint(e.CellBounds, DataGridViewPaintParts.All & ~DataGridViewPaintParts.ContentForeground);
@@ -411,22 +389,24 @@ internal sealed class OpeningTypeMapForm : Form
         e.Handled = true;
     }
 
-    /// <summary>The type of the <c>*</c> row of a category in the grid, if any.</summary>
+    /// <summary>
+    /// The type that codes without their own type fall back to: the <c>(no TYPE)</c> row of the
+    /// category when the DXF has one, otherwise the saved <c>*</c> entry.
+    /// </summary>
     private string? FindDefaultType(OpeningCategory category)
     {
         foreach (DataGridViewRow row in _grid.Rows)
         {
-            if (row.IsNewRow || CellText(row, CodeColumn) != OpeningTypeMap.DefaultCode)
+            if (CellText(row, CodeColumn).Length != 0)
                 continue;
             if ((IsWindowRow(row) ? OpeningCategory.Window : OpeningCategory.Door) != category)
                 continue;
 
             string type = CellText(row, TypeColumn);
-            if (type.Length > 0)
-                return type;
+            return type.Length > 0 ? type : null;
         }
 
-        return null;
+        return _baseMap.Resolve(category, OpeningTypeMap.DefaultCode);
     }
 
     /// <summary>Loads a type map file; the DXF codes stay listed and get the types from the file.</summary>

@@ -32,6 +32,7 @@ DxfToRevit builds the Revit model from it.
 | 12 | The import drew elements one by one and was slow | Compute first, then write everything in one batch transaction (unit of work) | `RevitImportBatch`, `RevitChangeScope`, `RevitBatchFailureHandler` |
 | 13 | Windows came in facing a random side; double, sliding and multi-panel variants | Windows read hinge circles like doors; the circles' count and position give the leaf layout; separate window convention | `OpeningLeafLayout`, `OpeningHanding`, `OpeningOrientationConvention` |
 | 14 | Circle count duplicated what the `TYPE` family already says | One circle per door or window: swing side and hinge end only | `OpeningInterpreter`, `OpeningHanding` |
+| 15 | Importing the same drawing twice gave no message | Revit's overlap warnings are collected and shown first in the summary | `RevitWarningLog`, `RevitBatchResult` |
 
 ## Classes by need (short)
 
@@ -312,6 +313,27 @@ layout from the number and position of circles duplicated that information.
 - For a symmetric double or sliding family the hand flip only mirrors it, which does no harm; for an
   asymmetric family it chooses the side, as wanted.
 
+## Stage 15 - Warning when a drawing is imported over itself
+
+**Requirement.** Importing the same drawing again at the same place created a second set of walls,
+columns, doors and windows without any message.
+
+**Cause.** Revit does detect it ("Highlighted walls overlap", "There are identical instances in the
+same place"), but `RevitBatchFailureHandler` deleted every warning so that Revit would not show a
+dialog per element.
+
+**Decision.** Use Revit's own detection instead of a geometric check of our own.
+
+- `RevitBatchFailureHandler` records each warning in a `RevitWarningLog` (API-free, tested) before
+  deleting it. Overlap warnings (`WallsOverlap`, `DuplicateInstances`, `FloorsOverlap`,
+  `OverlappingElementsTest`) are of kind `RevitWarningKind.Overlap`.
+- `RevitBatchResult.Warnings` carries the groups (text, count, elements); `HasOverlaps` tells whether
+  there is an overlap.
+- The summary title says *elements overlap existing elements*; the overlaps come first with a note
+  that one Undo removes the whole import, and other Revit warnings are listed at the end.
+- A check before writing (asking whether to continue) is possible later; since the import is one
+  undo step, the warning after the import was enough for now.
+
 ---
 
 # Part 3 - Class reference by need
@@ -416,6 +438,7 @@ the generated API reference.
 | `RevitFreeformColumnFamilyBuilder` | Level-bound families for freeform sections | `GetOrCreate(profile, out error)` |
 | `RevitWallCreator`, `RevitColumnCreator`, `RevitOpeningCreator` | Building API → document context | `CreateWall`, `CreateColumn`, `CreateOpening` |
 | `RevitImportBatch`, `RevitChangeScope`, `RevitBatchFailureHandler` | Fast, single-undo import that survives failing elements | `Regenerate`, `Commit`, `Start`, `PreprocessFailures` |
+| `RevitWarningLog`, `RevitWarningGroup` | Keeps the warnings Revit raises at commit, so overlaps (a drawing imported twice) reach the summary | `Add`, `Groups`, `RevitBatchResult.HasOverlaps` |
 
 ## User interface (add-in)
 

@@ -114,6 +114,7 @@ public sealed class ImportDxfCommand : IExternalCommand
         IReadOnlyList<WallCreationResult> wallResults = Array.Empty<WallCreationResult>();
         IReadOnlyList<ColumnCreationResult> columnResults = Array.Empty<ColumnCreationResult>();
         IReadOnlyList<OpeningCreationResult> openingResults = Array.Empty<OpeningCreationResult>();
+        IReadOnlyList<RevitWarningGroup> revitWarnings = Array.Empty<RevitWarningGroup>();
 
         // One transaction group: a single undo step, rolled back when nothing could be created.
         // Unit of work: everything was computed above; now all elements are written in one batch
@@ -140,6 +141,7 @@ public sealed class ImportDxfCommand : IExternalCommand
                     return Result.Failed;
                 }
 
+                revitWarnings = committed.Warnings;
                 wallResults = ApplyBatchOutcome(wallResults, committed,
                     r => r.HostElementId, r => r.RequestId, (r, why) => WallCreationResult.Fail(r.RequestId, why), (r, _) => r);
                 columnResults = ApplyBatchOutcome(columnResults, committed,
@@ -158,7 +160,7 @@ public sealed class ImportDxfCommand : IExternalCommand
             return Result.Failed;
         }
 
-        ShowSummary(path, pipe, wallResults, columnResults, openingResults, settingsForm.IncludeOpenings);
+        ShowSummary(path, pipe, wallResults, columnResults, openingResults, settingsForm.IncludeOpenings, revitWarnings);
         bool anySuccess = wallResults.Any(r => r.Success) || columnResults.Any(r => r.Success) ||
                           openingResults.Any(r => r.Success);
         return anySuccess ? Result.Succeeded : Result.Failed;
@@ -231,7 +233,8 @@ public sealed class ImportDxfCommand : IExternalCommand
         IReadOnlyList<WallCreationResult> walls,
         IReadOnlyList<ColumnCreationResult> columns,
         IReadOnlyList<OpeningCreationResult> openings,
-        bool openingsIncluded)
+        bool openingsIncluded,
+        IReadOnlyList<RevitWarningGroup> revitWarnings)
     {
         int wallsOk = walls.Count(r => r.Success);
         int columnsOk = columns.Count(r => r.Success);
@@ -244,6 +247,17 @@ public sealed class ImportDxfCommand : IExternalCommand
         sb.AppendLine($"Columns created: {columnsOk} / {columns.Count}");
         if (openingsIncluded)
             sb.AppendLine($"Openings created: {openingsOk} / {openings.Count} (markers in DXF: {pipe.OpeningMarkerCount})");
+
+        IReadOnlyList<RevitWarningGroup> overlapWarnings =
+            revitWarnings.Where(w => w.Kind == RevitWarningKind.Overlap).ToList();
+        bool overlaps = overlapWarnings.Count > 0;
+        if (overlaps)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Revit reports overlapping or duplicate elements. The drawing may already have been " +
+                          "imported at this place. Undo (Ctrl+Z) removes this whole import in one step.");
+            AppendRevitWarnings(sb, overlapWarnings, "Overlaps");
+        }
 
         if (pipe.AmbiguityCount > 0)
         {
@@ -265,12 +279,18 @@ public sealed class ImportDxfCommand : IExternalCommand
             AppendOpeningIssues(sb, "Opening warnings", pipe.OpeningIssues.Where(i => i.Severity == OpeningIssueSeverity.Warning).ToList());
         }
 
-        bool allOk = wallsOk == walls.Count && columnsOk == columns.Count &&
+        AppendRevitWarnings(sb, revitWarnings.Where(w => w.Kind == RevitWarningKind.Other).ToList(),
+            "Other Revit warnings");
+
+        bool allOk = !overlaps &&
+                     wallsOk == walls.Count && columnsOk == columns.Count &&
                      (!openingsIncluded || (openingsOk == openings.Count &&
                                             pipe.OpeningIssues.All(i => i.Severity != OpeningIssueSeverity.Error)));
         new TaskDialog("DxfToRevit")
         {
-            MainInstruction = allOk ? "Import finished" : "Import finished with issues",
+            MainInstruction = overlaps
+                ? "Import finished: elements overlap existing elements"
+                : allOk ? "Import finished" : "Import finished with issues",
             MainContent = sb.ToString()
         }.Show();
     }
@@ -300,6 +320,20 @@ public sealed class ImportDxfCommand : IExternalCommand
             string more = group.Count() > 5 ? $", +{group.Count() - 5} more" : string.Empty;
             sb.AppendLine($"  - {group.Key} at {where}{more}: {group.First().Message}");
         }
+    }
+
+    /// <summary>Appends a titled section of Revit warnings: text, how often, and how many elements.</summary>
+    private static void AppendRevitWarnings(StringBuilder sb, IReadOnlyList<RevitWarningGroup> warnings, string title)
+    {
+        if (warnings.Count == 0)
+            return;
+
+        sb.AppendLine();
+        sb.AppendLine($"{title} ({warnings.Sum(w => w.Count)}):");
+        foreach (RevitWarningGroup w in warnings.Take(MaxListedItems))
+            sb.AppendLine($"  - {w.Text} ({w.Count}x, {w.ElementCount} elements)");
+        if (warnings.Count > MaxListedItems)
+            sb.AppendLine($"  - +{warnings.Count - MaxListedItems} more kinds");
     }
 
     /// <summary>
