@@ -3,12 +3,13 @@ using System.Globalization;
 using System.IO;
 using Autodesk.Revit.DB;
 using DxfToRevit.Core.Building;
+using DxfToRevit.Core.Openings;
 
 namespace DxfToRevit.Revit;
 
 /// <summary>
-/// Resolves levels, wall types and column family types in a Revit document, creating new wall or
-/// column types (and loading round column families) when needed.
+/// Resolves levels, wall types, column family types and door/window types in a Revit document,
+/// creating new wall, column or opening types (and loading round column families) when needed.
 /// </summary>
 /// <remarks>
 /// The selection logic lives in the API-free planners (<see cref="LevelMatchPlanner"/>,
@@ -26,6 +27,8 @@ internal sealed class RevitElementResolver
     private readonly ColumnTypeMatchPlanner _columnPlanner;
     private readonly RevitColumnParameterNames _columnParams;
     private readonly Dictionary<string, FamilySymbol> _columnSymbolCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly RevitOpeningParameterNames _openingParams;
+    private readonly Dictionary<string, FamilySymbol> _openingSymbolCache = new(StringComparer.OrdinalIgnoreCase);
     private List<Level>? _levels;
     private bool _roundFamilyLoadAttempted;
 
@@ -33,10 +36,15 @@ internal sealed class RevitElementResolver
     /// <param name="document">Project document.</param>
     /// <param name="widthToleranceMm">Size tolerance (mm) when matching wall and column types.</param>
     /// <param name="columnParameterNames">Column size parameter names; defaults to <see cref="RevitColumnParameterNames.Default"/>.</param>
+    /// <param name="openingParameterNames">Door/window size parameter names; defaults to <see cref="RevitOpeningParameterNames.Default"/>.</param>
     /// <exception cref="System.ArgumentNullException"><paramref name="document"/> is <c>null</c>.</exception>
     public RevitElementResolver(
-        Document document, double widthToleranceMm = 0.5, RevitColumnParameterNames? columnParameterNames = null)
+        Document document,
+        double widthToleranceMm = 0.5,
+        RevitColumnParameterNames? columnParameterNames = null,
+        RevitOpeningParameterNames? openingParameterNames = null)
     {
+        _openingParams = openingParameterNames ?? RevitOpeningParameterNames.Default;
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _wallTypePlanner = new WallTypeMatchPlanner(widthToleranceMm);
         _columnPlanner = new ColumnTypeMatchPlanner(widthToleranceMm);
@@ -126,8 +134,7 @@ internal sealed class RevitElementResolver
         error = null;
         try
         {
-            using var tx = new Transaction(_document, "DxfToRevit Create WallType");
-            tx.Start();
+            using var tx = RevitChangeScope.Start(_document, "DxfToRevit Create WallType");
 
             var newType = (WallType)source.Duplicate(newName);
             CompoundStructure? cs = newType.GetCompoundStructure();
@@ -271,6 +278,132 @@ internal sealed class RevitElementResolver
         return result;
     }
 
+    /// <summary>
+    /// Returns a door or window type of the required size. The type referenced by
+    /// <paramref name="key"/> (<c>Family::Type</c> or a type name) is the template: it is used as is
+    /// when its size matches, otherwise a type of the same family with that size is reused, and
+    /// otherwise the template is duplicated as <c>&lt;Family&gt; - &lt;w&gt;x&lt;h&gt;mm</c> and resized.
+    /// </summary>
+    /// <param name="key">Type key from the opening type map.</param>
+    /// <param name="category">Door or window.</param>
+    /// <param name="widthMm">Required width in millimetres.</param>
+    /// <param name="heightMm">Required height in millimetres.</param>
+    /// <param name="error">Reason when no type could be provided.</param>
+    public FamilySymbol? ResolveOpeningSymbol(
+        string key, OpeningCategory category, double widthMm, double heightMm, out string? error)
+    {
+        error = null;
+        if (!OpeningTypeKey.TryParse(key, out OpeningTypeKey? typeKey) || typeKey is null)
+        {
+            error = $"Invalid {category} type key '{key}'; expected 'Family::Type'.";
+            return null;
+        }
+
+        string cacheKey = $"{category}|{typeKey}|{Fmt(widthMm)}|{Fmt(heightMm)}";
+        if (_openingSymbolCache.TryGetValue(cacheKey, out FamilySymbol? cached) && cached.IsValidObject)
+            return cached;
+
+        List<FamilySymbol> symbols = CollectOpeningSymbols(category);
+        FamilySymbol? template = symbols.FirstOrDefault(s => typeKey.Matches(s.FamilyName, s.Name));
+        if (template is null)
+        {
+            error = $"{category} type '{typeKey}' is not loaded in the project.";
+            return null;
+        }
+
+        FamilySymbol? result = OpeningSizeMatches(template, widthMm, heightMm)
+            ? template
+            : symbols.FirstOrDefault(s =>
+                  string.Equals(s.FamilyName, template.FamilyName, StringComparison.OrdinalIgnoreCase) &&
+                  OpeningSizeMatches(s, widthMm, heightMm));
+
+        if (result is null)
+        {
+            string newName = ColumnTypeMatchPlanner.BuildUniqueName(
+                symbols.Select(s => s.Name), template.FamilyName, widthMm, heightMm, circular: false);
+            result = DuplicateOpeningType(template, newName, category, widthMm, heightMm, out error);
+        }
+
+        if (result is not null)
+            _openingSymbolCache[cacheKey] = result;
+
+        return result;
+    }
+
+    /// <summary>All door or window types of the document, sorted by family and type name.</summary>
+    /// <param name="category">Door or window.</param>
+    public List<FamilySymbol> CollectOpeningSymbols(OpeningCategory category) =>
+        new FilteredElementCollector(_document)
+            .OfClass(typeof(FamilySymbol))
+            .OfCategory(category == OpeningCategory.Window ? BuiltInCategory.OST_Windows : BuiltInCategory.OST_Doors)
+            .Cast<FamilySymbol>()
+            .OrderBy(s => s.FamilyName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>Whether the type's width and height match within the size tolerance.</summary>
+    private bool OpeningSizeMatches(FamilySymbol symbol, double widthMm, double heightMm) =>
+        ReadOpeningLengthMm(symbol, _openingParams.Width, BuiltInParameter.FAMILY_WIDTH_PARAM) is double w &&
+        ReadOpeningLengthMm(symbol, _openingParams.Height, BuiltInParameter.FAMILY_HEIGHT_PARAM) is double h &&
+        Math.Abs(w - widthMm) <= _columnPlanner.SizeToleranceMm &&
+        Math.Abs(h - heightMm) <= _columnPlanner.SizeToleranceMm;
+
+    /// <summary>Duplicates a door/window type under a new name and sets its width and height (own transaction).</summary>
+    private FamilySymbol? DuplicateOpeningType(
+        FamilySymbol source, string newName, OpeningCategory category, double widthMm, double heightMm, out string? error)
+    {
+        error = null;
+        try
+        {
+            using var tx = RevitChangeScope.Start(_document, $"DxfToRevit Create {category} Type");
+
+            var newSymbol = (FamilySymbol)source.Duplicate(newName);
+            Parameter? w = FindOpeningParameter(newSymbol, _openingParams.Width, BuiltInParameter.FAMILY_WIDTH_PARAM);
+            Parameter? h = FindOpeningParameter(newSymbol, _openingParams.Height, BuiltInParameter.FAMILY_HEIGHT_PARAM);
+            if (w is null || h is null)
+            {
+                tx.RollBack();
+                error = $"Family '{source.FamilyName}' has no writable Width/Height type parameters " +
+                        $"(looked for: {string.Join("/", _openingParams.Width)}, {string.Join("/", _openingParams.Height)}). " +
+                        $"Writable length parameters: {DescribeWritableLengthParameters(source)}.";
+                return null;
+            }
+
+            if (!w.Set(LengthUnitConverter.MmToFeet(widthMm)) || !h.Set(LengthUnitConverter.MmToFeet(heightMm)))
+            {
+                tx.RollBack();
+                error = $"Could not set Width/Height on '{source.FamilyName}'.";
+                return null;
+            }
+
+            tx.Commit();
+            return newSymbol;
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to create {category} type '{newName}': {ex.Message}";
+            return null;
+        }
+    }
+
+    /// <summary>A writable size parameter by name, then the built-in parameter.</summary>
+    private static Parameter? FindOpeningParameter(Element element, IReadOnlyList<string> names, BuiltInParameter fallback)
+    {
+        Parameter? p = FindParameter(element, names, writable: true);
+        if (p is { StorageType: StorageType.Double })
+            return p;
+
+        Parameter? builtIn = element.get_Parameter(fallback);
+        return builtIn is { StorageType: StorageType.Double, IsReadOnly: false } ? builtIn : null;
+    }
+
+    /// <summary>Reads a size parameter by name, then the built-in parameter, in millimetres.</summary>
+    private static double? ReadOpeningLengthMm(Element element, IReadOnlyList<string> names, BuiltInParameter fallback) =>
+        ReadLengthMm(element, names) ??
+        (element.get_Parameter(fallback) is { StorageType: StorageType.Double } p
+            ? LengthUnitConverter.FeetToMm(p.AsDouble())
+            : null);
+
     /// <summary>All architectural column types of the document, sorted by family and type name.</summary>
     private List<FamilySymbol> CollectColumnSymbols() =>
         new FilteredElementCollector(_document)
@@ -370,8 +503,7 @@ internal sealed class RevitElementResolver
 
         try
         {
-            using var tx = new Transaction(_document, "DxfToRevit Load Round Column Family");
-            tx.Start();
+            using var tx = RevitChangeScope.Start(_document, "DxfToRevit Load Round Column Family");
             _document.LoadFamily(path, out Family _);
             tx.Commit();
             return true;
@@ -408,8 +540,7 @@ internal sealed class RevitElementResolver
         error = null;
         try
         {
-            using var tx = new Transaction(_document, "DxfToRevit Create ColumnType");
-            tx.Start();
+            using var tx = RevitChangeScope.Start(_document, "DxfToRevit Create ColumnType");
 
             var newSymbol = (FamilySymbol)source.Duplicate(newName);
             if (!TrySetColumnSize(newSymbol, circular, widthMm, depthMm, out error))

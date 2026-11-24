@@ -76,9 +76,8 @@ internal sealed class RevitFreeformColumnFamilyBuilder
 
         try
         {
-            using (var tx = new Transaction(_project, "DxfToRevit Load Freeform Column Family"))
+            using (var tx = RevitChangeScope.Start(_project, "DxfToRevit Load Freeform Column Family"))
             {
-                tx.Start();
                 _project.LoadFamily(rfaPath, new OverwriteFamilyLoadOptions(), out Family _);
                 tx.Commit();
             }

@@ -11,10 +11,12 @@ centerlines with correct L/T junctions, and creates native Revit elements bound 
 | @subpage architecture | Projects, layers, dependencies and the main types |
 | @subpage pipeline | The DXF → centerline → footprint algorithm, stage by stage |
 | @subpage columns | How column sections are classified and created in Revit |
+| @subpage openings | Doors, windows and empty openings: DXF markers, wall matching, type mapping |
 | @subpage revit_addin | Ribbon commands, import settings, transactions, deployment |
 | @subpage installation | Building and using the Inno Setup installer |
 | @subpage testing | Test projects and how to run them |
 | @subpage documentation | How this documentation is generated |
+| @subpage development_history | Development stages, the requirement behind each class and its key methods |
 
 The API reference (namespaces, classes, members) is available from the navigation tree.
 

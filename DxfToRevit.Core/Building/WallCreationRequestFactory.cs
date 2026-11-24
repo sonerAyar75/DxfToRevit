@@ -65,16 +65,29 @@ public sealed class WallCreationRequestFactory
             ? new List<WallCreationRequest>(collection.Count)
             : new List<WallCreationRequest>();
 
-        int i = 0;
+        int index = 0;
         foreach (WallSolid2D solid in solids)
         {
-            i++;
+            string id = WallIdForIndex(index++);
             if (solid.CenterLine.IsDegenerate)
                 continue;
-            list.Add(CreateRequest($"W{i:D3}", solid.CenterLine, solid.ThicknessMm));
+            list.Add(CreateRequest(id, solid.CenterLine, solid.ThicknessMm));
         }
 
         return list;
+    }
+
+    /// <summary>
+    /// Request id of the wall created from the footprint at <paramref name="index"/> (0-based) by
+    /// <see cref="FromWallSolids"/>: <c>W001</c> for index 0. Openings use it to find their host wall.
+    /// </summary>
+    /// <param name="index">0-based footprint index.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative.</exception>
+    public static string WallIdForIndex(int index)
+    {
+        if (index < 0)
+            throw new ArgumentOutOfRangeException(nameof(index));
+        return $"W{index + 1:D3}";
     }
 
     /// <summary>Builds a request with the session's wall type, structural flag and placement.</summary>
