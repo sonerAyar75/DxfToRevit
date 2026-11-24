@@ -33,8 +33,8 @@ public interface IImportModule
 
     /// <summary>How many elements of a category the drawing contains.</summary>
     /// <param name="category">One of <see cref="Categories"/>.</param>
-    /// <param name="drawing">Analysed drawing.</param>
-    int CountInDrawing(ImportCategory category, DxfCenterLinePipeline.Result drawing);
+    /// <param name="drawing">The DXF drawing: the loaded document and its analysis.</param>
+    int CountInDrawing(ImportCategory category, DxfDrawing drawing);
 
     /// <summary>
     /// Builds the creation requests of the chosen categories and sets aside those already in the

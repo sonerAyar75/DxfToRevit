@@ -34,8 +34,8 @@ public sealed class ColumnImportModule : IImportModule
     public bool RegenerateAfter => false;
 
     /// <inheritdoc />
-    public int CountInDrawing(ImportCategory category, DxfCenterLinePipeline.Result drawing) =>
-        drawing.Columns.Count;
+    public int CountInDrawing(ImportCategory category, DxfDrawing drawing) =>
+        drawing.Analysis.Columns.Count;
 
     /// <inheritdoc />
     public ImportModulePlan Plan(ImportPlanContext context, ImportBag shared)
@@ -56,7 +56,7 @@ public sealed class ColumnImportModule : IImportModule
             FreeformColumnTypeKey = options.FreeformTypeKey
         };
 
-        List<ColumnCreationRequest> requests = factory.FromColumnModels(context.Drawing.Columns)
+        List<ColumnCreationRequest> requests = factory.FromColumnModels(context.Drawing.Analysis.Columns)
             .Where(r => r.Type.SectionKind switch
             {
                 ColumnSectionKind.Circular => options.IncludeCircular,

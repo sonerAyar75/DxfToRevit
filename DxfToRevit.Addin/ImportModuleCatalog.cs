@@ -39,7 +39,7 @@ internal static class ImportModuleCatalog
     /// <param name="modules">Modules of the import.</param>
     /// <param name="drawing">Analysed DXF; <c>null</c> when the dialog is opened without a DXF.</param>
     public static IReadOnlyList<ImportCategoryChoice> Choices(
-        IEnumerable<IImportModule> modules, DxfCenterLinePipeline.Result? drawing) =>
+        IEnumerable<IImportModule> modules, DxfDrawing? drawing) =>
         modules.OrderBy(m => m.Order)
             .SelectMany(m => m.Categories.Select(c =>
                 new ImportCategoryChoice(c, drawing is null ? null : m.CountInDrawing(c, drawing))))

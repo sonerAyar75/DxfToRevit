@@ -54,28 +54,28 @@ public sealed class ImportDxfCommand : IExternalCommand
             return Result.Cancelled;
 
         (double, double, double, double) heightsUsed = CurrentDefaultHeights();
-        if (!TryAnalyze(path, out DxfCenterLinePipeline.Result pipe, ref message))
+        if (!TryAnalyze(path, out DxfDrawing drawing, ref message))
             return Result.Failed;
 
         var context = new RevitApiDocumentContext(doc);
         var coordinator = new ImportCoordinator(ImportModuleCatalog.Create(context));
-        IReadOnlyList<ImportCategoryChoice> choices = ImportModuleCatalog.Choices(coordinator.Modules, pipe);
+        IReadOnlyList<ImportCategoryChoice> choices = ImportModuleCatalog.Choices(coordinator.Modules, drawing);
 
         if (choices.All(c => c.Count == 0))
         {
             TaskDialog.Show("DxfToRevit",
                 $"Nothing to import from this DXF.\n" +
-                $"Wall lines: {pipe.WallLineCount}, face pairs: {pipe.PairCount}, ambiguities: {pipe.AmbiguityCount}, columns: {pipe.ColumnCount}.");
+                $"Wall lines: {drawing.Analysis.WallLineCount}, face pairs: {drawing.Analysis.PairCount}, ambiguities: {drawing.Analysis.AmbiguityCount}, columns: {drawing.Analysis.ColumnCount}.");
             return Result.Cancelled;
         }
 
         using var settingsForm = new ImportSettingsForm(
-            doc, choices, System.IO.Path.GetFileName(path), OpeningCodeSummary.Build(pipe.Openings));
+            doc, choices, System.IO.Path.GetFileName(path), OpeningCodeSummary.Build(drawing.Analysis.Openings));
         if (settingsForm.ShowDialog() != System.Windows.Forms.DialogResult.OK)
             return Result.Cancelled;
 
         // Default heights only matter for blocks without height attributes; re-read when they changed.
-        if (CurrentDefaultHeights() != heightsUsed && !TryAnalyze(path, out pipe, ref message))
+        if (CurrentDefaultHeights() != heightsUsed && !TryAnalyze(path, out drawing, ref message))
             return Result.Failed;
 
         var session = new ImportSessionOptions(
@@ -102,7 +102,7 @@ public sealed class ImportDxfCommand : IExternalCommand
         // Compute first: every module builds its requests and sets aside what is already in the
         // model (existing walls also host the new doors and windows). Nothing is written yet.
         coordinator.Plan(new ImportPlanContext(
-            pipe, session, new ExistingElementMatcher(RevitExistingElementReader.Read(doc)),
+            drawing, session, new ExistingElementMatcher(RevitExistingElementReader.Read(doc)),
             settingsForm.IncludedCategoryKeys, settingsForm.SkipExisting, options));
 
         IReadOnlyList<ImportModuleResult> results = Array.Empty<ImportModuleResult>();
@@ -138,17 +138,17 @@ public sealed class ImportDxfCommand : IExternalCommand
             return Result.Failed;
         }
 
-        ShowSummary(path, pipe, results, coordinator.Skipped, revitWarnings);
+        ShowSummary(path, drawing.Analysis, results, coordinator.Skipped, revitWarnings);
         bool anySuccess = results.Any(r => r.Created > 0);
         return anySuccess || coordinator.Skipped.Count > 0 ? Result.Succeeded : Result.Failed;
     }
 
     /// <summary>Runs the pipeline analysis with the current opening defaults; sets <paramref name="message"/> on failure.</summary>
-    private static bool TryAnalyze(string path, out DxfCenterLinePipeline.Result result, ref string message)
+    private static bool TryAnalyze(string path, out DxfDrawing result, ref string message)
     {
         try
         {
-            result = new DxfCenterLinePipeline(OpeningImportPreferences.CreateRegistry()).Analyze(path);
+            result = new DxfCenterLinePipeline(OpeningImportPreferences.CreateRegistry(), LayerRules.Default).AnalyzeDrawing(path);
             return true;
         }
         catch (Exception ex)

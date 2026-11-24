@@ -14,8 +14,8 @@ namespace DxfToRevit.Tests.Import;
 /// </summary>
 public sealed class ImportCoordinatorTests
 {
-    private static readonly DxfCenterLinePipeline.Result Drawing =
-        new DxfCenterLinePipeline().Analyze(TestDataPath("OpeningsDoors.dxf"));
+    private static readonly DxfDrawing Drawing =
+        new DxfCenterLinePipeline().AnalyzeDrawing(TestDataPath("OpeningsDoors.dxf"));
 
     private static readonly ImportSessionOptions Session = new(baseLevelName: "Level 1");
 
@@ -138,7 +138,7 @@ public sealed class ImportCoordinatorTests
     {
         var existing = new ExistingElements(
             Array.Empty<ExistingWall>(), Array.Empty<ExistingColumn>(),
-            Drawing.Openings.Select((o, i) => new ExistingOpening($"E{i}", o.Definition.Category, "Level 1", o.Placement.CenterOnWallMm)).ToList());
+            Drawing.Analysis.Openings.Select((o, i) => new ExistingOpening($"E{i}", o.Definition.Category, "Level 1", o.Placement.CenterOnWallMm)).ToList());
         (ImportCoordinator coordinator, InMemoryBuildingModel model) = Coordinator();
 
         coordinator.Plan(Context(AllCategories, skipExisting: false, existing: existing));

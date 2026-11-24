@@ -38,8 +38,8 @@ public sealed class WallImportModule : IImportModule
     public bool RegenerateAfter => true;
 
     /// <inheritdoc />
-    public int CountInDrawing(ImportCategory category, DxfCenterLinePipeline.Result drawing) =>
-        drawing.WallSolids.Count;
+    public int CountInDrawing(ImportCategory category, DxfDrawing drawing) =>
+        drawing.Analysis.WallSolids.Count;
 
     /// <inheritdoc />
     public ImportModulePlan Plan(ImportPlanContext context, ImportBag shared)
@@ -48,7 +48,7 @@ public sealed class WallImportModule : IImportModule
         ArgumentNullException.ThrowIfNull(shared);
 
         IReadOnlyList<WallCreationRequest> requests =
-            new WallCreationRequestFactory(context.Session).FromWallSolids(context.Drawing.WallSolids);
+            new WallCreationRequestFactory(context.Session).FromWallSolids(context.Drawing.Analysis.WallSolids);
         ExistingSplit<WallCreationRequest> split =
             ExistingElementMatcher.Split(requests, r => r.Id, context.Existing.FindWall);
 

@@ -45,8 +45,8 @@ public sealed class OpeningImportModule : IImportModule
     public bool RegenerateAfter => false;
 
     /// <inheritdoc />
-    public int CountInDrawing(ImportCategory category, DxfCenterLinePipeline.Result drawing) =>
-        drawing.Openings.Count(o => CategoryOf(o.Definition.Category) == category);
+    public int CountInDrawing(ImportCategory category, DxfDrawing drawing) =>
+        drawing.Analysis.Openings.Count(o => CategoryOf(o.Definition.Category) == category);
 
     /// <inheritdoc />
     public ImportModulePlan Plan(ImportPlanContext context, ImportBag shared)
@@ -60,12 +60,12 @@ public sealed class OpeningImportModule : IImportModule
         if (!_included)
             return ImportModulePlan.Nothing;
 
-        _countSuffix = $"(markers in DXF: {context.Drawing.OpeningMarkerCount})";
-        _sections = IssueSections(context.Drawing.OpeningIssues);
+        _countSuffix = $"(markers in DXF: {context.Drawing.Analysis.OpeningMarkerCount})";
+        _sections = IssueSections(context.Drawing.Analysis.OpeningIssues);
 
         OpeningTypeMap typeMap = context.Options.Get<OpeningImportOptions>()?.TypeMap ?? OpeningTypeMap.Empty;
         List<OpeningCreationRequest> requests = new OpeningCreationRequestFactory(context.Session, typeMap)
-            .FromOpeningModels(context.Drawing.Openings)
+            .FromOpeningModels(context.Drawing.Analysis.Openings)
             .Where(r => context.IsIncluded(CategoryOf(r.Category)))
             .ToList();
 

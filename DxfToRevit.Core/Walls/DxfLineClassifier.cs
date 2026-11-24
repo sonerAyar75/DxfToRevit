@@ -8,7 +8,14 @@ namespace DxfToRevit.Core.Walls;
 /// </summary>
 public sealed class DxfLineClassifier
 {
-    private readonly WallLayerRule _wallLayerRule = new();
+    private readonly WallLayerRule _wallLayerRule;
+
+    /// <summary>Creates the classifier.</summary>
+    /// <param name="wallLayerRule">Wall layer rule; the default rule when <c>null</c>.</param>
+    public DxfLineClassifier(WallLayerRule? wallLayerRule = null)
+    {
+        _wallLayerRule = wallLayerRule ?? new WallLayerRule();
+    }
 
     /// <summary>Assigns the wall flag and thickness of a line from its layer name.</summary>
     /// <param name="line">Raw line.</param>

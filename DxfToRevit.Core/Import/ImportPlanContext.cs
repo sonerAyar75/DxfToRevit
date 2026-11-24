@@ -9,7 +9,7 @@ public sealed class ImportPlanContext
     private readonly IReadOnlySet<string> _included;
 
     /// <summary>Creates the context.</summary>
-    /// <param name="drawing">Analysed DXF drawing.</param>
+    /// <param name="drawing">The DXF drawing: the loaded document and its analysis.</param>
     /// <param name="session">Level, height and type options of the import.</param>
     /// <param name="existing">Elements already in the model.</param>
     /// <param name="includedCategoryKeys">Keys of the categories chosen for import.</param>
@@ -17,7 +17,7 @@ public sealed class ImportPlanContext
     /// <param name="options">Module options set by the host.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     public ImportPlanContext(
-        DxfCenterLinePipeline.Result drawing,
+        DxfDrawing drawing,
         ImportSessionOptions session,
         ExistingElementMatcher existing,
         IEnumerable<string> includedCategoryKeys,
@@ -33,8 +33,8 @@ public sealed class ImportPlanContext
         Options = options ?? new ImportBag();
     }
 
-    /// <summary>Analysed DXF drawing.</summary>
-    public DxfCenterLinePipeline.Result Drawing { get; }
+    /// <summary>The DXF drawing: the loaded document and its analysis.</summary>
+    public DxfDrawing Drawing { get; }
 
     /// <summary>Level, height and type options of the import.</summary>
     public ImportSessionOptions Session { get; }

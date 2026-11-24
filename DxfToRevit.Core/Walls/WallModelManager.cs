@@ -8,7 +8,14 @@ namespace DxfToRevit.Core.Walls;
 /// </summary>
 public sealed class WallModelManager
 {
-    private readonly WallLayerRule _layerRule = new();
+    private readonly WallLayerRule _layerRule;
+
+    /// <summary>Creates the manager.</summary>
+    /// <param name="layerRule">Wall layer rule; the default rule when <c>null</c>.</param>
+    public WallModelManager(WallLayerRule? layerRule = null)
+    {
+        _layerRule = layerRule ?? new WallLayerRule();
+    }
 
     /// <summary>
     /// Creates a wall from an existing centerline. The thickness comes from the layer name; when the

@@ -7,7 +7,14 @@ namespace DxfToRevit.Core.Walls;
 /// </summary>
 public sealed class DxfLineClassificationService
 {
-    private readonly DxfLineClassifier _classifier = new();
+    private readonly DxfLineClassifier _classifier;
+
+    /// <summary>Creates the service.</summary>
+    /// <param name="classifier">Line classifier; one with the default wall rule when <c>null</c>.</param>
+    public DxfLineClassificationService(DxfLineClassifier? classifier = null)
+    {
+        _classifier = classifier ?? new DxfLineClassifier();
+    }
 
     /// <summary>Classifies every line in the sequence.</summary>
     /// <param name="lines">Raw DXF lines.</param>

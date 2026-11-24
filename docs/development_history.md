@@ -37,6 +37,7 @@ DxfToRevit builds the Revit model from it.
 | 17 | Floors, rooms and roofs are next; every element type was wired in by hand | Every kind of element is an import module run by a coordinator | `IImportModule`, `ImportCoordinator`, `ImportModuleCatalog` |
 | 18 | Mixed folder conventions, several types per file, outdated names | Folders and namespaces by feature, one type per file, sorted usings | (structure only) |
 | 19 | One Revit class created every element and another resolved every type | A facade over one writer and one type resolver per kind of element; batch participants | `RevitWallWriter`, `RevitColumnWriter`, `RevitOpeningWriter`, `IRevitBatchParticipant` |
+| 20 | New modules had to extend the analysis result; wall and column layer names were fixed in code | Modules get the drawing (document + analysis); layer rules are data | `DxfDrawing`, `LayerRules`, `WallLayerRule`, `ColumnLayerRule` |
 
 ## Classes by need (short)
 
@@ -437,6 +438,26 @@ moved, not rewritten, and the add-in and the tests use the same `IRevitDocumentC
   `Import` (batch, failure handler, warnings, existing elements) and `Common`.
 - The unused `GetOpeningTypeKeys` of the context was removed (the settings dialog reads the types
   itself).
+
+## Stage 20 - Drawing input for modules, layer rules as data
+
+**Requirement.** A new module (floors, rooms) had to add its elements to
+`DxfCenterLinePipeline.Result`, so every new kind of element changed the analysis class. Wall and
+column layer names were fixed in code (`WALL-*`, `COLUMN*`), while doors and windows were already
+defined by data (`OpeningDefinitionRegistry`).
+
+**Decision.** Keep the analysis for what belongs together, give modules the document for the rest,
+and make the layer rules data. No behaviour changes with the defaults.
+
+- `DxfDrawing` (the loaded `DxfDocument` with its analysis) is the input of the modules
+  (`ImportPlanContext.Drawing`, `IImportModule.CountInDrawing`); `DxfCenterLinePipeline.AnalyzeDrawing`
+  returns it. Walls, columns and openings stay in one analysis because they depend on each other
+  (openings bridge wall gaps and are attached to footprints; columns close gaps); a floor module
+  reads its outlines from `DxfDrawing.Document` with its own reader, without touching the analysis.
+- `WallLayerRule` takes its base names and `ColumnLayerRule` its names and prefixes as data;
+  `LayerRules` groups them (`LayerRules.Default` is the standard naming). The pipeline passes them to
+  the line classifier, the wall models and the column reader. A layer mapping file for other office
+  standards can now be added without changing the analysis.
 
 ---
 

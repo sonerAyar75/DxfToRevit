@@ -14,7 +14,9 @@ a new kind of element does not touch them.
 | `IImportModule` | Core | One kind of element: its categories, its place in the import, planning and creation |
 | `ImportCategory`, `ImportCategories` | Core | A check box of the settings dialog (`Walls`, `Doors`, ...); a module offers one or more |
 | `ImportCoordinator` | Core | Orders the modules, lets them plan, then create, and regenerates the model where asked |
-| `ImportPlanContext` | Core | What a module needs to plan: the analysed drawing, the session options, the elements already in the model, the chosen categories, the module options |
+| `DxfDrawing` | Core | The input of the modules: the loaded DXF document and the analysis of walls, columns and openings |
+| `LayerRules` | Core | Which layers hold wall faces and columns; data, so another office standard is another set of rules |
+| `ImportPlanContext` | Core | What a module needs to plan: the drawing, the session options, the elements already in the model, the chosen categories, the module options |
 | `ImportBag` | Core | Typed values: module options set by the host, and data a module hands to later modules |
 | `ImportModuleResult`, `ImportEntry`, `ImportReportSection` | Core | What a module created, failed to create and wants to report |
 | `ImportModuleCatalog` | Add-in | The modules of the add-in, wired to the Revit creators |
@@ -46,11 +48,15 @@ imported alone.
 
 For example floors drawn as closed polylines on a `FLOOR-<cm>` layer:
 
-1. **Read and interpret** the DXF entities in Core (a reader and a model, like `DxfColumnReader`
-   and `ColumnModel`). If the module needs entities the pipeline does not read yet, add them to
-   `DxfCenterLinePipeline.Result`.
+1. **Read and interpret** the DXF entities in a `Core/Floors` folder: a layer rule (like
+   `ColumnLayerRule`, with the names as data), a reader and a model (like `DxfColumnReader` and
+   `ColumnModel`). The reader reads `DxfDrawing.Document`, so the analysis
+   (`DxfCenterLinePipeline`) does not change. Only elements that depend on the wall analysis
+   (bridged gaps, wall footprints) belong in the analysis itself.
 2. **Request and creator**: a creation request, a validator, an `IFloorCreator` interface with an
-   in-memory implementation, and the Revit implementation in `DxfToRevit.Revit`.
+   in-memory implementation, and the Revit side in `DxfToRevit.Revit/Floors`: an argument mapper,
+   a type resolver, a writer and the `RevitFloorCreator` adapter, built by `RevitApiDocumentContext`
+   (a writer that defers work to the end of the batch implements `IRevitBatchParticipant`).
 3. **Module**: a class implementing `IImportModule` with its category (`new ImportCategory("floors",
    "Floors")`), an `Order` (after the walls, for example 150), `CountInDrawing`, `Plan` (build the
    requests, use `ExistingElementMatcher` to skip floors already in the model) and `Create`.

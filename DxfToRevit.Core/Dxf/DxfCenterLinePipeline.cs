@@ -103,21 +103,26 @@ public sealed class DxfCenterLinePipeline
     }
 
     /// <summary>
-    /// Creates the pipeline with default collaborators and the given opening kinds (for example with
-    /// default heights chosen by the user).
+    /// Creates the pipeline with default collaborators, the given opening kinds (for example with
+    /// default heights chosen by the user) and layer rules.
     /// </summary>
     /// <param name="openingDefinitions">Opening kinds recognised in the DXF.</param>
-    public DxfCenterLinePipeline(OpeningDefinitionRegistry openingDefinitions)
+    /// <param name="layerRules">Wall and column layer rules; <see cref="LayerRules.Default"/> when <c>null</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="openingDefinitions"/> is <c>null</c>.</exception>
+    public DxfCenterLinePipeline(OpeningDefinitionRegistry openingDefinitions, LayerRules? layerRules = null)
         : this(
-            new DxfLineImportService(),
+            new DxfLineImportService(
+                new DxfReader(),
+                new DxfGeometryReader(),
+                new DxfLineClassificationService(new DxfLineClassifier((layerRules ?? LayerRules.Default).Walls))),
             new WallFacePairFinder(),
-            new WallModelManager(),
+            new WallModelManager((layerRules ?? LayerRules.Default).Walls),
             new OpenSideCenterLineBridger(),
             new WallCenterLineJunctionProcessor(),
             new CollinearCenterLineMerger(maxGapMm: 5.0),
             new WallFootprintBuilder(),
             new DxfReader(),
-            new DxfColumnReader(),
+            new DxfColumnReader((layerRules ?? LayerRules.Default).Columns),
             new DxfSimulationWriter(),
             new DxfOpeningReader(openingDefinitions ?? throw new ArgumentNullException(nameof(openingDefinitions))))
     {
@@ -179,7 +184,21 @@ public sealed class DxfCenterLinePipeline
     /// <returns>The pipeline result; <see cref="Result.OutputPath"/> is <c>null</c>.</returns>
     /// <exception cref="ArgumentException">The path is empty.</exception>
     /// <exception cref="FileNotFoundException">The file does not exist.</exception>
-    public Result Analyze(string inputPath) => Execute(inputPath, outputPath: null, writeOutput: false);
+    public Result Analyze(string inputPath) => Execute(inputPath, outputPath: null, writeOutput: false).Result;
+
+    /// <summary>
+    /// Analyses the DXF like <see cref="Analyze"/> and keeps the loaded document with the result, so
+    /// import modules can read entities the analysis does not cover (for example floor outlines).
+    /// </summary>
+    /// <param name="inputPath">Path of the DXF file.</param>
+    /// <returns>The document and its analysis.</returns>
+    /// <exception cref="ArgumentException">The path is empty.</exception>
+    /// <exception cref="FileNotFoundException">The file does not exist.</exception>
+    public DxfDrawing AnalyzeDrawing(string inputPath)
+    {
+        (DxfDocument document, Result result) = Execute(inputPath, outputPath: null, writeOutput: false);
+        return new DxfDrawing(inputPath, document, result);
+    }
 
     /// <summary>
     /// Runs the full pipeline and writes the simulation DXF. When <paramref name="outputPath"/> is
@@ -191,10 +210,10 @@ public sealed class DxfCenterLinePipeline
     /// <exception cref="ArgumentException">The input path is empty.</exception>
     /// <exception cref="FileNotFoundException">The file does not exist.</exception>
     public Result Run(string inputPath, string? outputPath = null) =>
-        Execute(inputPath, outputPath, writeOutput: true);
+        Execute(inputPath, outputPath, writeOutput: true).Result;
 
-    /// <summary>Shared implementation of <see cref="Analyze"/> and <see cref="Run"/>.</summary>
-    private Result Execute(string inputPath, string? outputPath, bool writeOutput)
+    /// <summary>Shared implementation of <see cref="Analyze"/>, <see cref="AnalyzeDrawing"/> and <see cref="Run"/>; returns the loaded document with the result.</summary>
+    private (DxfDocument Document, Result Result) Execute(string inputPath, string? outputPath, bool writeOutput)
     {
         if (string.IsNullOrWhiteSpace(inputPath))
             throw new ArgumentException("Input path is required.", nameof(inputPath));
@@ -258,7 +277,7 @@ public sealed class DxfCenterLinePipeline
                 openings.Openings.Select(o => o.Marker.Outline));
         }
 
-        return new Result
+        return (document, new Result
         {
             OutputPath = writeOutput ? outputPath : null,
             InputLineCount = classifiedLines.Count,
@@ -275,7 +294,7 @@ public sealed class DxfCenterLinePipeline
             OpeningMarkerCount = markers.Count,
             Openings = openings.Openings,
             OpeningIssues = openingIssues
-        };
+        });
     }
 
     /// <summary>

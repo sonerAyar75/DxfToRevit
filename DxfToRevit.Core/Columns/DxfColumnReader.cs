@@ -16,7 +16,14 @@ namespace DxfToRevit.Core.Columns;
 /// </remarks>
 public sealed class DxfColumnReader
 {
-    private readonly ColumnLayerRule _layerRule = new();
+    private readonly ColumnLayerRule _layerRule;
+
+    /// <summary>Creates the reader.</summary>
+    /// <param name="layerRule">Column layer rule; the default rule when <c>null</c>.</param>
+    public DxfColumnReader(ColumnLayerRule? layerRule = null)
+    {
+        _layerRule = layerRule ?? new ColumnLayerRule();
+    }
 
     /// <summary>Maximum distance (mm) between the first and last vertex for an open polyline to count as closed.</summary>
     public double ClosureToleranceMm { get; init; } = 1.0;
