@@ -30,7 +30,7 @@ wall it sits on, and anything that does not fit the rules is reported instead of
 |------|-------------|
 | Block name | `door`, `window` or `opening` (case-insensitive); dynamic blocks keep their name through the anonymous `*U` copies |
 | Geometry | One closed 4-vertex polyline: the opening rectangle. Its long side lies along the wall. |
-| Hinge | Doors and windows: a circle on the face the leaf swings to, at the hinge end (see *Swing* below). Without a circle the orientation is left as Revit places it, with a warning. Circles in `opening` blocks are ignored. |
+| Hinge | Doors and windows: a circle on the face the leaf swings to, at the hinge end (see *Swing* below). Without a circle the orientation is left as Revit places it, with a warning. Circles in `opening` blocks are ignored. Circles hidden by a visibility state are ignored, so one block can offer the layouts as named states (for example `single`, `double`, `sliding`); the state name itself is not read. |
 | Placement | Inside the wall, spanning the opening from jamb to jamb. Any rotation, scale or mirroring. |
 | Attributes | `TYPE` (code), `HEIGHT` (cm), `SILL_HEIGHT` (cm, windows and empty openings) |
 

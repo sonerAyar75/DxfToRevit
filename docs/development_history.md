@@ -285,6 +285,11 @@ adds a hinge circle to the window block as in the door block.
 - `OpeningOrientationPlanner` holds one `OpeningOrientationConvention` per category: doors keep the
   verified convention; windows default to facing away from the swing side (exterior, sashes open
   inwards), to be verified in Revit. The hand is only flipped for a single leaf.
+- The user switches the circles with named visibility states (`single`, `double`, `sliding`) in
+  one block. A test DXF showed that AutoCAD marks the circles hidden by the current state as
+  invisible (group code 60) in the block definition, also in the base block for the default state,
+  so `DxfOpeningReader` only keeps visible circles. The state name is not read: netDxf does not
+  parse the dynamic block parameters, and the visible circles already carry the same information.
 
 ---
 

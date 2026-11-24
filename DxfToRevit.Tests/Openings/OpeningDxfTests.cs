@@ -34,6 +34,29 @@ public sealed class OpeningDxfTests
     }
 
     /// <summary>The pipeline attaches the doors to their walls with the dynamic block widths and no errors.</summary>
+    /// <summary>Circles hidden by a visibility state (invisible flag) are not hinge marks.</summary>
+    [Fact]
+    public void ReadMarkers_HiddenCircles_AreIgnored()
+    {
+        var block = new netDxf.Blocks.Block("window");
+        block.Entities.Add(new netDxf.Entities.Polyline2D(new[]
+        {
+            new netDxf.Entities.Polyline2DVertex(-1000, 0), new netDxf.Entities.Polyline2DVertex(0, 0),
+            new netDxf.Entities.Polyline2DVertex(0, -150), new netDxf.Entities.Polyline2DVertex(-1000, -150)
+        }, true));
+        block.Entities.Add(new netDxf.Entities.Circle(new Vector3(0, 0, 0), 20));
+        block.Entities.Add(new netDxf.Entities.Circle(new Vector3(-1000, 0, 0), 20) { IsVisible = false });
+        block.Entities.Add(new netDxf.Entities.Circle(new Vector3(-500, 0, 0), 20) { IsVisible = false });
+        var document = new DxfDocument();
+        document.Entities.Add(new netDxf.Entities.Insert(block, new Vector3(5000, 2000, 0)));
+
+        OpeningMarker marker = Assert.Single(new DxfOpeningReader().ReadMarkers(document).Markers);
+
+        Vector2 hinge = Assert.Single(marker.HingePoints);
+        Assert.Equal(5000, hinge.X, 6);
+        Assert.Equal(2000, hinge.Y, 6);
+    }
+
     [Fact]
     public void Analyze_SampleFile_CreatesDoorsWithBlockWidths()
     {

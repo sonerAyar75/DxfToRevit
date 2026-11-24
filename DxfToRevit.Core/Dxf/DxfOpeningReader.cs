@@ -17,8 +17,9 @@ public sealed record DxfOpeningReadResult(IReadOnlyList<OpeningMarker> Markers, 
 /// <see cref="DynamicBlockNameResolver"/> — or its layer matches an <see cref="OpeningDefinition"/>.
 /// The marker geometry is the first closed 4-vertex polyline of the block, transformed to world
 /// coordinates with the reference's position, rotation, scale and mirroring, so the width of a
-/// stretched dynamic block is read from its actual geometry. Every circle of the block is a hinge
-/// mark; <see cref="OpeningInterpreter"/> derives the swing side and hinge end from them.
+/// stretched dynamic block is read from its actual geometry. Every visible circle of the block is a
+/// hinge mark; circles hidden by a visibility state are ignored, so one block can offer several hinge
+/// layouts as named visibility states. <see cref="OpeningInterpreter"/> derives the swing side and hinge end from them.
 /// </remarks>
 public sealed class DxfOpeningReader
 {
@@ -75,7 +76,10 @@ public sealed class DxfOpeningReader
             Vector2 origin = new(insert.Block.Origin.X, insert.Block.Origin.Y);
             Vector2 ToWorld(Vector2 p) => Transform(p - origin, insert);
 
+            // Circles hidden by the current visibility state of a dynamic block carry the
+            // invisible flag (group code 60) in the block definition, also for the default state.
             List<Vector2> hingePoints = insert.Block.Entities.OfType<Circle>()
+                .Where(c => c.IsVisible)
                 .Select(c => ToWorld(new Vector2(c.Center.X, c.Center.Y)))
                 .ToList();
 
