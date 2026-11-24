@@ -20,11 +20,11 @@ public sealed record OpeningOrientationConvention(bool FacingPointsToSwingSide, 
     public static OpeningOrientationConvention StandardDoor { get; } = new(true, true);
 
     /// <summary>
-    /// Standard Revit window families: the facing points to the exterior, away from the side an
-    /// inward-opening sash swings to, and the hand points towards the hinge. To be verified in
-    /// Revit like the door convention.
+    /// Standard Revit window families: the facing points to the side the sash swings to and the
+    /// hand points towards the hinge, as for doors. Revit 2025 showed that the first assumption
+    /// (facing away from the swing side) reversed the swing of every window.
     /// </summary>
-    public static OpeningOrientationConvention StandardWindow { get; } = new(false, true);
+    public static OpeningOrientationConvention StandardWindow { get; } = new(true, true);
 }
 
 /// <summary>

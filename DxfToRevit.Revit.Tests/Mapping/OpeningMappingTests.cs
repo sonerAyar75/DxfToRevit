@@ -78,14 +78,14 @@ public sealed class OpeningMappingTests
     }
 
     [Fact]
-    public void NeedsFacingFlip_DefaultWindowConvention_FacingPointsAwayFromSwing()
+    public void NeedsFacingFlip_DefaultWindowConvention_FacingPointsToSwing()
     {
         var planner = new OpeningOrientationPlanner();
-        // Sash swings to the left (+Y) face, i.e. inside: the window facing must point to -Y (outside).
+        // Sash swings to the left (+Y) face: the window facing must point to +Y (verified in Revit 2025).
         OpeningHanding handing = OpeningHanding.Single(HingeEnd.Start, SwingSide.Left);
 
-        Assert.True(planner.NeedsFacingFlip(OpeningCategory.Window, (1, 0), handing, (0, 1)));
-        Assert.False(planner.NeedsFacingFlip(OpeningCategory.Window, (1, 0), handing, (0, -1)));
+        Assert.False(planner.NeedsFacingFlip(OpeningCategory.Window, (1, 0), handing, (0, 1)));
+        Assert.True(planner.NeedsFacingFlip(OpeningCategory.Window, (1, 0), handing, (0, -1)));
     }
 
     [Fact]

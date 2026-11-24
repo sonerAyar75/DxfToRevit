@@ -290,6 +290,8 @@ adds a hinge circle to the window block as in the door block.
   invisible (group code 60) in the block definition, also in the base block for the default state,
   so `DxfOpeningReader` only keeps visible circles. The state name is not read: netDxf does not
   parse the dynamic block parameters, and the visible circles already carry the same information.
+- Revit test with the corrected block: every window opened to the wrong side, so
+  `StandardWindow` was changed to facing towards the swing side, the same as doors.
 
 ---
 

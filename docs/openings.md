@@ -158,7 +158,7 @@ hand orientation with the marker, using the `OpeningOrientationConvention` of it
 | Convention | Facing | Hand | Status |
 |------------|--------|------|--------|
 | `StandardDoor` (`Door`) | points **to** the swing side | points **towards** the hinge | verified in Revit 2025 |
-| `StandardWindow` (`Window`) | points **away** from the swing side (to the exterior; sashes open inwards) | points **towards** the hinge | to be verified in Revit |
+| `StandardWindow` (`Window`) | points **to** the swing side | points **towards** the hinge | facing verified in Revit 2025 |
 
 The facing is flipped first, then the hand is checked again and flipped if needed; the hand is only
 checked for `SingleHinged` markers. When a family cannot flip, the element is kept and a note is
@@ -166,7 +166,9 @@ shown in the summary. Both conventions are properties of the planner, so a famil
 other conventions only needs a different planner passed to `RevitApiDocumentContext`.
 
 The door defaults were checked in Revit 2025 with `OpeningsDoors.dxf`: the first assumption (both
-pointing away) mirrored every door in both directions, so both conventions were inverted.
+pointing away) mirrored every door in both directions, so both conventions were inverted. Windows
+were first assumed to face away from the swing side (exterior); in Revit 2025 every window opened
+to the wrong side, so the window facing now follows the door convention.
 
 ## Import summary
 
