@@ -129,11 +129,13 @@ The Revit import first asks for the DXF and analyses it, then opens the settings
 codes of the drawing are known before mapping. The **Doors, windows and openings** group shows how
 many doors, windows and empty openings the DXF contains and how many codes still have no Revit
 type; it switches the import on or off and opens **Opening types and heights...**. That dialog
-lists every door and window `TYPE` code found in the DXF first (`OpeningCodeSummary`,
-`OpeningTypeMapRows`), with its count and sizes, followed by the saved rows that are not in the
-DXF and a `*` row for doors and windows. Rows cannot be added and their category and code are fixed;
-only the Revit type is chosen (deleting a DXF or `*` row clears its type). A DXF row without its own type shows the `*` type it falls back to, or
-*not mapped* in red; blocks without a `TYPE` attribute can only use the `*` row. Right-clicking
+lists only the door and window `TYPE` codes found in the DXF (`OpeningCodeSummary`,
+`OpeningTypeMapRows`), with their count and sizes: the drawing groups its openings into types and
+each type gets a Revit family. Rows cannot be added and their category and code are fixed; only the
+Revit type is chosen (deleting a row clears its type). Blocks without a `TYPE` attribute form a
+*(no TYPE)* row, stored as the `*` entry, which is also the fallback of codes without a type (shown
+as *default* in grey); otherwise *not mapped* is shown in red. Saved entries of codes that are not
+in this DXF are kept for other drawings but not listed. Right-clicking
 (or double-clicking) a *Revit type* cell offers the loaded door or window types grouped by family,
 and types that are not loaded in the project are shown in red. *Load from file* and *Save to file*
 read and write the format above. The same dialog sets the default heights (cm) used when a block

@@ -22,9 +22,9 @@ public sealed record OpeningTypeMapRow(
 public static class OpeningTypeMapRows
 {
     /// <summary>
-    /// One row per door/window code found in the DXF (with its mapped type, if any), followed by
-    /// the map entries whose codes are not in the DXF (for example <c>*</c>), in map order, and an
-    /// empty <c>*</c> row for doors and windows when the map has none (the editor cannot add rows).
+    /// One row per door/window code found in the DXF, with its mapped type, if any. Only the codes of
+    /// the drawing are listed; blocks without a <c>TYPE</c> attribute show the <c>*</c> entry (see
+    /// <see cref="MapCode"/>).
     /// </summary>
     /// <param name="map">Current type map.</param>
     /// <param name="usages">Codes found in the DXF; empty when no DXF is loaded.</param>
@@ -37,25 +37,11 @@ public static class OpeningTypeMapRows
         var rows = new List<OpeningTypeMapRow>();
         foreach (OpeningCodeUsage usage in usages.Where(IsMappable))
         {
+            string code = MapCode(usage.Code);
             string? typeKey = map.Entries.LastOrDefault(e =>
                 e.Category == usage.Category &&
-                string.Equals(e.Code, usage.Code, StringComparison.OrdinalIgnoreCase))?.TypeKey;
+                string.Equals(e.Code, code, StringComparison.OrdinalIgnoreCase))?.TypeKey;
             rows.Add(new OpeningTypeMapRow(usage.Category, usage.Code, typeKey, usage.Count, string.Join(", ", usage.Sizes)));
-        }
-
-        foreach (OpeningTypeMapEntry entry in map.Entries)
-        {
-            bool shown = rows.Any(r => r.Category == entry.Category &&
-                                       string.Equals(r.Code, entry.Code, StringComparison.OrdinalIgnoreCase));
-            if (!shown)
-                rows.Add(new OpeningTypeMapRow(entry.Category, entry.Code, entry.TypeKey, 0, string.Empty));
-        }
-
-        // The editor cannot add rows, so the * row of each category is always offered.
-        foreach (OpeningCategory category in new[] { OpeningCategory.Door, OpeningCategory.Window })
-        {
-            if (!rows.Any(r => r.Category == category && r.Code == OpeningTypeMap.DefaultCode))
-                rows.Add(new OpeningTypeMapRow(category, OpeningTypeMap.DefaultCode, null, 0, string.Empty));
         }
 
         return rows;
@@ -71,6 +57,38 @@ public static class OpeningTypeMapRows
         ArgumentNullException.ThrowIfNull(usages);
         return usages.Where(u => IsMappable(u) && map.Resolve(u.Category, u.Code) is null).ToList();
     }
+
+    /// <summary>
+    /// The map after editing the listed rows: the entries of <paramref name="previous"/> for codes
+    /// that are not listed (other drawings) are kept, the listed codes take the edited types (a row
+    /// left empty removes its entry).
+    /// </summary>
+    /// <param name="previous">Map the rows were built from.</param>
+    /// <param name="usages">Codes listed in the editor.</param>
+    /// <param name="edited">Entries read from the listed rows (map codes, see <see cref="MapCode"/>).</param>
+    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    public static OpeningTypeMap Merge(
+        OpeningTypeMap previous, IEnumerable<OpeningCodeUsage> usages, IEnumerable<OpeningTypeMapEntry> edited)
+    {
+        ArgumentNullException.ThrowIfNull(previous);
+        ArgumentNullException.ThrowIfNull(usages);
+        ArgumentNullException.ThrowIfNull(edited);
+
+        var listed = usages.Where(IsMappable)
+            .Select(u => (u.Category, Code: MapCode(u.Code).ToUpperInvariant()))
+            .ToHashSet();
+        IEnumerable<OpeningTypeMapEntry> kept = previous.Entries
+            .Where(e => !listed.Contains((e.Category, e.Code.ToUpperInvariant())));
+        return new OpeningTypeMap(kept.Concat(edited));
+    }
+
+    /// <summary>
+    /// The map code of a DXF code: blocks without a <c>TYPE</c> attribute are mapped by the
+    /// <see cref="OpeningTypeMap.DefaultCode"/> entry, which <see cref="OpeningTypeMap.Resolve"/> uses for them.
+    /// </summary>
+    /// <param name="dxfCode">Code as found in the DXF; empty when the block has no <c>TYPE</c>.</param>
+    public static string MapCode(string dxfCode) =>
+        string.IsNullOrWhiteSpace(dxfCode) ? OpeningTypeMap.DefaultCode : dxfCode.Trim();
 
     /// <summary>Only doors and windows are mapped to Revit types; empty openings need none.</summary>
     private static bool IsMappable(OpeningCodeUsage usage) =>
