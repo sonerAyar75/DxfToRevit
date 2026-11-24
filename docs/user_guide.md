@@ -183,6 +183,8 @@ it and their sizes. For each row:
 
 - **Right-click** (or double-click) the *Revit type* cell and choose a type from the loaded
   families. Types that are not loaded in the project are shown in red.
+- Only the codes of the categories chosen for import are listed: windows that are not imported
+  need no type.
 - Rows cannot be added; deleting a row only clears its type.
 - *not mapped* (red) means the code has no type: those doors or windows are not created. When
   you confirm with unmapped codes, the dialog asks whether to continue.

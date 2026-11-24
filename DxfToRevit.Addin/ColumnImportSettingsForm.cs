@@ -132,6 +132,18 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
     /// <summary>Whether elements already in the model are skipped.</summary>
     public bool SkipExisting => _skipExisting.Checked;
 
+    /// <summary>
+    /// The DXF codes of the categories chosen for import: doors and windows that are not imported
+    /// need no Revit type, so they are not listed in the type map editor nor checked for a type.
+    /// </summary>
+    private IReadOnlyList<OpeningCodeUsage> SelectedOpeningUsages =>
+        _openingUsages.Where(u => u.Category switch
+        {
+            OpeningCategory.Door => IncludeDoors,
+            OpeningCategory.Window => IncludeWindows,
+            _ => IncludeEmptyOpenings
+        }).ToList();
+
     /// <summary>Whether circular columns are imported at all.</summary>
     public bool IncludeCircularColumns => !_skipCircular.Checked;
     /// <summary>Whether circular columns are replaced by square columns.</summary>
@@ -216,7 +228,11 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
         importLayout.Controls.Add(_skipExisting);
         importGroup.Controls.Add(importLayout);
         foreach (CheckBox box in new[] { _includeWalls, _includeColumns, _includeDoors, _includeWindows, _includeEmptyOpenings })
-            box.CheckedChanged += (_, _) => UpdateEnabledState();
+            box.CheckedChanged += (_, _) =>
+            {
+                UpdateEnabledState();
+                UpdateOpeningInfo();
+            };
 
         var levelGroup = new GroupBox
         {
@@ -420,9 +436,7 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
                 if (IncludeDoors || IncludeWindows)
                 {
                     IReadOnlyList<OpeningCodeUsage> unmapped =
-                        OpeningTypeMapRows.Unmapped(OpeningImportPreferences.TypeMap, _openingUsages)
-                            .Where(u => u.Category == OpeningCategory.Door ? IncludeDoors : IncludeWindows)
-                            .ToList();
+                        OpeningTypeMapRows.Unmapped(OpeningImportPreferences.TypeMap, SelectedOpeningUsages);
                     if (unmapped.Count > 0 && MessageBox.Show(this,
                             "These DXF codes have no Revit type and will not be created:\n" +
                             OpeningTypeMapForm.DescribeUsages(unmapped) +
@@ -670,7 +684,7 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
         using var form = new OpeningTypeMapForm(
             CollectTypeKeys(document, BuiltInCategory.OST_Doors),
             CollectTypeKeys(document, BuiltInCategory.OST_Windows),
-            _openingUsages);
+            SelectedOpeningUsages);
         if (form.ShowDialog(this) != DialogResult.OK)
             return;
 
@@ -691,7 +705,7 @@ internal sealed class ColumnImportSettingsForm : System.Windows.Forms.Form
         if (_openingUsages.Count > 0)
         {
             int Count(OpeningCategory category) => _openingUsages.Where(u => u.Category == category).Sum(u => u.Count);
-            int unmapped = OpeningTypeMapRows.Unmapped(OpeningImportPreferences.TypeMap, _openingUsages).Count;
+            int unmapped = OpeningTypeMapRows.Unmapped(OpeningImportPreferences.TypeMap, SelectedOpeningUsages).Count;
             _openingInfo.Text =
                 $"In the DXF: {Count(OpeningCategory.Door)} door(s), {Count(OpeningCategory.Window)} window(s), " +
                 $"{Count(OpeningCategory.EmptyOpening)} empty opening(s).\n" +
