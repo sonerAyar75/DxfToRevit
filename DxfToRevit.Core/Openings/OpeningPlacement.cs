@@ -67,14 +67,21 @@ public sealed class OpeningPlacement
     }
 }
 
-/// <summary>Swing of a hinged opening, relative to the host wall direction.</summary>
-/// <param name="HingeEnd">End of the opening on which the hinge lies.</param>
-/// <param name="SwingSide">Wall face to which the leaf swings (the face holding the hinge).</param>
-public sealed record OpeningHanding(HingeEnd HingeEnd, SwingSide SwingSide);
+/// <summary>
+/// Orientation of a door or window, relative to the host wall direction, as read from the one
+/// circle of its marker. What the orientation means for a double, sliding or multi-panel leaf is
+/// up to the Revit family mapped to the <c>TYPE</c> code.
+/// </summary>
+/// <param name="HingeEnd">
+/// End of the opening on which the circle lies; <c>null</c> when the circle is in the middle of the
+/// opening (left/right is then left as Revit places it).
+/// </param>
+/// <param name="SwingSide">Wall face to which the leaf swings (the face holding the circle).</param>
+public sealed record OpeningHanding(HingeEnd? HingeEnd, SwingSide SwingSide);
 
 /// <summary>
 /// An interpreted opening, ready to be turned into a creation request: its kind, marker, place on
-/// the host wall, heights, type code and (for hinged openings) swing.
+/// the host wall, heights, type code and (for doors and windows) orientation.
 /// </summary>
 public sealed class OpeningModel
 {
@@ -93,7 +100,10 @@ public sealed class OpeningModel
     /// <summary>Type code and heights.</summary>
     public OpeningAttributes Attributes { get; }
 
-    /// <summary>Swing for hinged openings; <c>null</c> otherwise.</summary>
+    /// <summary>
+    /// Orientation for doors and windows; <c>null</c> for empty openings and for markers without a
+    /// usable circle (the family is then left as Revit places it).
+    /// </summary>
     public OpeningHanding? Handing { get; }
 
     /// <summary>Creates an opening model.</summary>
@@ -101,7 +111,7 @@ public sealed class OpeningModel
     /// <param name="marker">Source marker.</param>
     /// <param name="placement">Place on the host wall.</param>
     /// <param name="attributes">Type code and heights.</param>
-    /// <param name="handing">Swing, for hinged openings.</param>
+    /// <param name="handing">Orientation, for doors and windows.</param>
     /// <exception cref="ArgumentException"><paramref name="id"/> is empty.</exception>
     /// <exception cref="ArgumentNullException">A reference argument is <c>null</c>.</exception>
     public OpeningModel(

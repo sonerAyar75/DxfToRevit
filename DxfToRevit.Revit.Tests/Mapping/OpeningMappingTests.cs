@@ -57,11 +57,12 @@ public sealed class OpeningMappingTests
     [InlineData(SwingSide.Left, 0, -1, true)]
     [InlineData(SwingSide.Right, 0, -1, false)]
     [InlineData(SwingSide.Right, 0, 1, true)]
-    public void NeedsFacingFlip_DefaultConvention(SwingSide side, double fx, double fy, bool expected)
+    public void NeedsFacingFlip_DefaultDoorConvention(SwingSide side, double fx, double fy, bool expected)
     {
         var planner = new OpeningOrientationPlanner();
 
-        bool flip = planner.NeedsFacingFlip((1, 0), new OpeningHanding(HingeEnd.Start, side), (fx, fy));
+        bool flip = planner.NeedsFacingFlip(
+            OpeningCategory.Door, (1, 0), new OpeningHanding(HingeEnd.Start, side), (fx, fy));
 
         Assert.Equal(expected, flip);
     }
@@ -69,10 +70,32 @@ public sealed class OpeningMappingTests
     [Fact]
     public void NeedsFacingFlip_FacingAwayFromSwingConvention_IsInverted()
     {
-        var planner = new OpeningOrientationPlanner { FacingPointsToSwingSide = false };
+        var planner = new OpeningOrientationPlanner { Door = new OpeningOrientationConvention(false, true) };
+        OpeningHanding handing = new OpeningHanding(HingeEnd.Start, SwingSide.Left);
 
-        Assert.True(planner.NeedsFacingFlip((1, 0), new OpeningHanding(HingeEnd.Start, SwingSide.Left), (0, 1)));
-        Assert.False(planner.NeedsFacingFlip((1, 0), new OpeningHanding(HingeEnd.Start, SwingSide.Left), (0, -1)));
+        Assert.True(planner.NeedsFacingFlip(OpeningCategory.Door, (1, 0), handing, (0, 1)));
+        Assert.False(planner.NeedsFacingFlip(OpeningCategory.Door, (1, 0), handing, (0, -1)));
+    }
+
+    [Fact]
+    public void NeedsFacingFlip_DefaultWindowConvention_FacingPointsToSwing()
+    {
+        var planner = new OpeningOrientationPlanner();
+        // Sash swings to the left (+Y) face: the window facing must point to +Y (verified in Revit 2025).
+        OpeningHanding handing = new OpeningHanding(HingeEnd.Start, SwingSide.Left);
+
+        Assert.False(planner.NeedsFacingFlip(OpeningCategory.Window, (1, 0), handing, (0, 1)));
+        Assert.True(planner.NeedsFacingFlip(OpeningCategory.Window, (1, 0), handing, (0, -1)));
+    }
+
+    [Fact]
+    public void ConventionFor_UsesWindowConventionOnlyForWindows()
+    {
+        var window = new OpeningOrientationConvention(true, false);
+        var planner = new OpeningOrientationPlanner { Window = window };
+
+        Assert.Same(window, planner.ConventionFor(OpeningCategory.Window));
+        Assert.Same(OpeningOrientationConvention.StandardDoor, planner.ConventionFor(OpeningCategory.Door));
     }
 
     [Theory]
@@ -85,7 +108,8 @@ public sealed class OpeningMappingTests
     {
         var planner = new OpeningOrientationPlanner();
 
-        bool flip = planner.NeedsHandFlip((1, 0), new OpeningHanding(end, SwingSide.Left), (hx, hy));
+        bool flip = planner.NeedsHandFlip(
+            OpeningCategory.Door, (1, 0), new OpeningHanding(end, SwingSide.Left), (hx, hy));
 
         Assert.Equal(expected, flip);
     }
@@ -94,10 +118,21 @@ public sealed class OpeningMappingTests
     public void NeedsHandFlip_RotatedWall_UsesWallDirection()
     {
         var planner = new OpeningOrientationPlanner();
+        OpeningHanding handing = new OpeningHanding(HingeEnd.End, SwingSide.Left);
 
         // Wall along +Y, hinge at the end: the hand should point to +Y.
-        Assert.False(planner.NeedsHandFlip((0, 1), new OpeningHanding(HingeEnd.End, SwingSide.Left), (0, 1)));
-        Assert.True(planner.NeedsHandFlip((0, 1), new OpeningHanding(HingeEnd.End, SwingSide.Left), (0, -1)));
+        Assert.False(planner.NeedsHandFlip(OpeningCategory.Door, (0, 1), handing, (0, 1)));
+        Assert.True(planner.NeedsHandFlip(OpeningCategory.Door, (0, 1), handing, (0, -1)));
+    }
+
+    [Theory]
+    [InlineData(OpeningCategory.Door)]
+    [InlineData(OpeningCategory.Window)]
+    public void NeedsHandFlip_WithoutHingeEnd_NeverFlips(OpeningCategory category)
+    {
+        var planner = new OpeningOrientationPlanner();
+
+        Assert.False(planner.NeedsHandFlip(category, (1, 0), new OpeningHanding(null, SwingSide.Left), (-1, 0)));
     }
 
     [Theory]

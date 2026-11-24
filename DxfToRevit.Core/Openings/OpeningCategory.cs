@@ -29,10 +29,14 @@ public enum OpeningCreationMode
 /// <summary>How the swing of an opening is described by the marker block.</summary>
 public enum OpeningHandingMode
 {
-    /// <summary>No swing (windows, empty openings).</summary>
+    /// <summary>No swing (empty openings).</summary>
     None,
 
-    /// <summary>Hinged leaf: the hinge circle gives the hinge end and the swing side.</summary>
+    /// <summary>
+    /// Leaves (doors, windows): the one circle of the block gives the swing side and the hinge end.
+    /// The kind of door or window (single, double, sliding, multi-panel) comes from the Revit family
+    /// mapped to the <c>TYPE</c> code, not from the block.
+    /// </summary>
     Hinged
 }
 
@@ -46,7 +50,10 @@ public enum HingeEnd
     End
 }
 
-/// <summary>Wall face, relative to the wall direction (start → end), on which a door swings.</summary>
+/// <summary>
+/// Wall face, relative to the wall direction (start → end), to which a door or window leaf swings
+/// (the face on which the marker's circle lies).
+/// </summary>
 public enum SwingSide
 {
     /// <summary>The face to the left of the wall direction.</summary>

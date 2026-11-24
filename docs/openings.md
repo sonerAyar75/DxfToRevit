@@ -19,7 +19,7 @@ wall it sits on, and anything that does not fit the rules is reported instead of
 | 4 | Thickness | Taken from the host wall, never from the block depth. |
 | 5 | Heights | Attributes, in **centimetres**: `HEIGHT`, `SILL_HEIGHT`; defaults when missing. |
 | 6 | Revit type | Attribute `TYPE` is a code, mapped to a Revit type by a table (pick from a list or read from a file). |
-| 7 | Door swing | The circle in the block is the **hinge**: its end of the opening is the hinge end, its wall face is the swing side. |
+| 7 | Swing (doors and windows) | One circle in the block marks the hinge: its wall face is the swing side, its half of the opening the hinge end. Door and window variants (double, sliding, multi-panel) are not separate blocks and are not read from circles: they come from the family mapped to `TYPE`. |
 | 8 | Jamb lines | Wall lines inside a marker are ignored. |
 | 9 | Walls | Walls run continuously through marked openings; the opening is then cut by the door, window or opening. |
 | 10 | Unmarked gaps | Left open, as before, and reported. |
@@ -30,7 +30,7 @@ wall it sits on, and anything that does not fit the rules is reported instead of
 |------|-------------|
 | Block name | `door`, `window` or `opening` (case-insensitive); dynamic blocks keep their name through the anonymous `*U` copies |
 | Geometry | One closed 4-vertex polyline: the opening rectangle. Its long side lies along the wall. |
-| Hinge | A circle at the hinge corner (doors). Without a circle the insertion point is used. |
+| Hinge | Doors and windows: one circle on the face the leaf swings to, at the hinge end (see *Swing* below). Without a circle the orientation is left as Revit places it, with a warning. Circles in `opening` blocks are ignored. Circles hidden by a visibility state are ignored, so a block may move the circle with named states; the state name itself is not read. |
 | Placement | Inside the wall, spanning the opening from jamb to jamb. Any rotation, scale or mirroring. |
 | Attributes | `TYPE` (code), `HEIGHT` (cm), `SILL_HEIGHT` (cm, windows and empty openings) |
 
@@ -70,15 +70,25 @@ centre lies inside the wall strip. Then:
 
 Openings with an error are not created. Warnings are listed in the import summary.
 
-### Swing (doors)
+### Swing (doors and windows)
 
-With the wall direction defined by its centerline (start → end):
+The block only says what the Revit family cannot know: which face the leaf swings to and at
+which end the hinge is. Single, double, sliding or multi-panel comes from the family mapped to
+the `TYPE` code, so a block needs **exactly one visible circle**. With the wall direction defined
+by its centerline (start → end):
 
-- `HingeEnd` = the end of the opening (start or end along the wall) nearest to the hinge;
-- `SwingSide` = the wall face (left or right of the direction) on which the hinge lies.
+| Circle | Result |
+|--------|--------|
+| One circle, off the axis and off the middle | `SwingSide` = its wall face, `HingeEnd` = the half of the opening it lies in |
+| One circle in the middle of the opening | swing side only, warning |
+| One circle on the wall axis | no orientation, warning |
+| No circle, or more than one | no orientation, warning |
+
+For a double, sliding or fixed family the circle still sets the facing; the hand flip only
+mirrors the family, which is harmless for symmetric ones and meaningful for asymmetric ones.
 
 In Revit the instance is placed, its actual hand and facing orientations are read, and it is
-flipped only when they differ from the desired ones, so any door family works.
+flipped only when they differ from the desired ones, so any door or window family works.
 
 ## Classes
 
@@ -89,7 +99,7 @@ flipped only when they differ from the desired ones, so any door family works.
 | Interpretation | `OpeningRegionFilter`, `OpeningWallMatcher`, `OpeningPlacement`, `OpeningHanding`, `OpeningModel`, `OpeningIssue` |
 | Building API | `OpeningCreationRequest`, `OpeningCreationRequestFactory`, `OpeningCreationValidator`, `IOpeningCreator`, `OpeningCreationResult`, `InMemoryOpeningCreator`, `BuildingModelService.CreateOpenings` |
 | Type mapping | `OpeningTypeMap`, `OpeningTypeMapFile` |
-| Revit | `OpeningCreateArgs`, `OpeningCreateArgsMapper`, `OpeningOrientationPlanner`, `OpeningTypeKey`, `RevitOpeningParameterNames`, `RevitOpeningCreator`, `RevitApiDocumentContext.CreateOpening`, `RevitElementResolver.ResolveOpeningSymbol` |
+| Revit | `OpeningCreateArgs`, `OpeningCreateArgsMapper`, `OpeningOrientationPlanner`, `OpeningOrientationConvention`, `OpeningTypeKey`, `RevitOpeningParameterNames`, `RevitOpeningCreator`, `RevitApiDocumentContext.CreateOpening`, `RevitElementResolver.ResolveOpeningSymbol` |
 | Add-in | `OpeningTypeMapForm`, `OpeningImportPreferences`, `ColumnImportSettingsForm` (openings group), `ImportDxfCommand` |
 
 A new kind (for example a sliding door) is a new `OpeningDefinition` entry, not a new class:
@@ -133,28 +143,31 @@ continue; those openings are then not created. The choices are kept for the Revi
 
 | Kind | Revit |
 |------|-------|
-| Door, window | Family instance hosted by the wall, at the opening centre on the base level; sill height set (windows); flipped to match the swing |
+| Door, window | Family instance hosted by the wall, at the opening centre on the base level; sill height set (windows); flipped to match the circles |
 | Empty opening | Rectangular wall opening from sill to sill + height |
 
 Openings are created after the walls and are hosted by the wall created from the same footprint.
 If that wall was not created, the opening fails with a clear message.
 
-### Door orientation
+### Door and window orientation
 
-After placing a door, `OpeningOrientationPlanner` compares the instance's facing and hand
-orientation with the marker:
+After placing a door or window, `OpeningOrientationPlanner` compares the instance's facing and
+hand orientation with the marker, using the `OpeningOrientationConvention` of its category:
 
-- facing: the facing orientation points **to** the side the leaf swings to
-  (`FacingPointsToSwingSide = true`, the default);
-- hand: the hand orientation points **towards** the hinge (`HandPointsToHinge = true`, the default).
+| Convention | Facing | Hand | Status |
+|------------|--------|------|--------|
+| `StandardDoor` (`Door`) | points **to** the swing side | points **towards** the hinge | verified in Revit 2025 |
+| `StandardWindow` (`Window`) | points **to** the swing side | points **towards** the hinge | facing verified in Revit 2025 |
 
-The facing is flipped first, then the hand is checked again and flipped if needed. When a family
-cannot flip, the door is kept and a note is shown in the summary. Both conventions are properties
-of the planner, so a family library with the opposite convention only needs a different planner
-passed to `RevitApiDocumentContext`.
+The facing is flipped first, then the hand is checked again and flipped if needed; the hand is only
+checked when the marker gives a hinge end. When a family cannot flip, the element is kept and a note is
+shown in the summary. Both conventions are properties of the planner, so a family library with
+other conventions only needs a different planner passed to `RevitApiDocumentContext`.
 
-These defaults were checked in Revit 2025 with `OpeningsDoors.dxf`: the first assumption (both
-pointing away) mirrored every door in both directions, so both conventions were inverted.
+The door defaults were checked in Revit 2025 with `OpeningsDoors.dxf`: the first assumption (both
+pointing away) mirrored every door in both directions, so both conventions were inverted. Windows
+were first assumed to face away from the swing side (exterior); in Revit 2025 every window opened
+to the wrong side, so the window facing now follows the door convention.
 
 ## Import summary
 

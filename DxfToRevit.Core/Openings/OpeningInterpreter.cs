@@ -11,7 +11,8 @@ public sealed record OpeningInterpretation(IReadOnlyList<OpeningModel> Openings,
 
 /// <summary>
 /// Turns opening markers into <see cref="OpeningModel"/>s on the final wall footprints:
-/// attaches each marker to its wall, reads its attributes, derives the door swing, rejects
+/// attaches each marker to its wall, reads its attributes, derives the door and window orientation
+/// from the block's circles, rejects
 /// overlapping openings and numbers the result per kind (<c>D001</c>, <c>W001</c>, <c>O001</c>).
 /// </summary>
 public sealed class OpeningInterpreter
@@ -73,36 +74,52 @@ public sealed class OpeningInterpreter
     }
 
     /// <summary>
-    /// Derives the swing from the hinge point: the hinge end is the opening end nearer to the hinge,
-    /// the swing side is the wall face on which the hinge lies.
+    /// Derives the orientation from the one circle of the marker: the wall face it lies on is the
+    /// swing side and the half of the opening it lies in is the hinge end. The kind of leaf (double,
+    /// sliding, multi-panel) is not read from the block; it comes from the family mapped to the
+    /// <c>TYPE</c> code. Returns <c>null</c> (with a warning) when the block has no circle or more
+    /// than one; a circle on the wall axis or in the middle of the opening leaves that part as
+    /// Revit places it, with a warning.
     /// </summary>
-    private OpeningHanding DeriveHanding(
+    private OpeningHanding? DeriveHanding(
         OpeningMarker marker, OpeningPlacement placement, WallSolid2D wall, ICollection<OpeningIssue> issues)
     {
         string name = marker.Definition.Name;
-        if (!marker.HasHingeCircle)
+        if (marker.HingePoints.Count != 1)
         {
+            string reason = marker.HingePoints.Count == 0
+                ? "no circle in the block"
+                : $"{marker.HingePoints.Count} visible circles in the block, one is expected";
             issues.Add(OpeningIssue.Warning(OpeningIssueCode.MissingHinge, marker.Handle, marker.Center,
-                $"{name}: no hinge circle in the block; the insertion point is used as the hinge."));
+                $"{name}: {reason}; the orientation is left as Revit places it."));
+            return null;
         }
 
         Vector2 u = placement.WallDirection;
         Vector2 n = new(-u.Y, u.X);
-        Vector2 d = marker.HingePoint - wall.CenterLine.Start;
+        Vector2 d = marker.HingePoints[0] - wall.CenterLine.Start;
         double s = Vector2.DotProduct(d, u);
         double t = Vector2.DotProduct(d, n);
+        double tolerance = _matcher.ToleranceMm;
 
-        HingeEnd end = Math.Abs(s - placement.StartOffsetMm) <= Math.Abs(s - placement.EndOffsetMm)
-            ? HingeEnd.Start
-            : HingeEnd.End;
-
-        if (Math.Abs(t) < _matcher.ToleranceMm)
+        if (Math.Abs(t) < tolerance)
         {
             issues.Add(OpeningIssue.Warning(OpeningIssueCode.MissingHinge, marker.Handle, marker.Center,
-                $"{name}: the hinge lies on the wall axis, so the swing side is unknown; the left side is assumed."));
+                $"{name}: the circle lies on the wall axis, so the swing side is unknown; the orientation is left as Revit places it."));
+            return null;
         }
 
-        return new OpeningHanding(end, t >= 0 ? SwingSide.Left : SwingSide.Right);
+        SwingSide side = t > 0 ? SwingSide.Left : SwingSide.Right;
+        double middle = (placement.StartOffsetMm + placement.EndOffsetMm) / 2;
+
+        if (Math.Abs(s - middle) < tolerance)
+        {
+            issues.Add(OpeningIssue.Warning(OpeningIssueCode.MissingHinge, marker.Handle, marker.Center,
+                $"{name}: the circle lies in the middle of the opening, so the hinge end is unknown; only the swing side is applied."));
+            return new OpeningHanding(null, side);
+        }
+
+        return new OpeningHanding(s < middle ? HingeEnd.Start : HingeEnd.End, side);
     }
 
     /// <summary>Reports openings that overlap another opening on the same wall; returns their markers.</summary>

@@ -4,7 +4,7 @@ namespace DxfToRevit.Core.Openings;
 
 /// <summary>
 /// A marker block read from the DXF, before it is attached to a wall: the opening rectangle in
-/// world coordinates, the hinge point and the raw attribute values.
+/// world coordinates, the circle centres (hinges) and the raw attribute values.
 /// </summary>
 public sealed class OpeningMarker
 {
@@ -26,11 +26,15 @@ public sealed class OpeningMarker
     /// <summary>Centre of the rectangle in millimetres.</summary>
     public Vector2 Center { get; }
 
-    /// <summary>Hinge point in millimetres: the hinge circle centre, or the insertion point.</summary>
-    public Vector2 HingePoint { get; }
+    /// <summary>
+    /// Centres of the visible circles of the block in millimetres (world coordinates), in block
+    /// order. A door or window block should have exactly one: its side of the wall is the swing
+    /// side and the half of the opening it lies in gives the hinge end.
+    /// </summary>
+    public IReadOnlyList<Vector2> HingePoints { get; }
 
-    /// <summary>Whether <see cref="HingePoint"/> comes from a circle in the block.</summary>
-    public bool HasHingeCircle { get; }
+    /// <summary>Whether the block has at least one circle.</summary>
+    public bool HasHingeCircle => HingePoints.Count > 0;
 
     /// <summary>Attribute values by tag (case-insensitive), as written in the DXF.</summary>
     public IReadOnlyDictionary<string, string> Attributes { get; }
@@ -41,8 +45,7 @@ public sealed class OpeningMarker
     /// <param name="layer">Layer name.</param>
     /// <param name="definition">Opening kind.</param>
     /// <param name="outline">Rectangle vertices in millimetres (exactly 4).</param>
-    /// <param name="hingePoint">Hinge point in millimetres.</param>
-    /// <param name="hasHingeCircle">Whether the hinge point comes from a circle.</param>
+    /// <param name="hingePoints">Circle centres in millimetres; empty when the block has no circle.</param>
     /// <param name="attributes">Attribute values by tag.</param>
     /// <exception cref="ArgumentException">The handle is empty or the outline does not have 4 vertices.</exception>
     /// <exception cref="ArgumentNullException">A reference argument is <c>null</c>.</exception>
@@ -52,8 +55,7 @@ public sealed class OpeningMarker
         string layer,
         OpeningDefinition definition,
         IReadOnlyList<Vector2> outline,
-        Vector2 hingePoint,
-        bool hasHingeCircle,
+        IReadOnlyList<Vector2> hingePoints,
         IReadOnlyDictionary<string, string> attributes)
     {
         if (string.IsNullOrWhiteSpace(handle))
@@ -62,6 +64,7 @@ public sealed class OpeningMarker
         ArgumentNullException.ThrowIfNull(layer);
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(outline);
+        ArgumentNullException.ThrowIfNull(hingePoints);
         ArgumentNullException.ThrowIfNull(attributes);
         if (outline.Count != 4)
             throw new ArgumentException("A marker outline needs exactly 4 vertices.", nameof(outline));
@@ -72,8 +75,7 @@ public sealed class OpeningMarker
         Definition = definition;
         Outline = outline.ToList().AsReadOnly();
         Center = new Vector2(Outline.Average(p => p.X), Outline.Average(p => p.Y));
-        HingePoint = hingePoint;
-        HasHingeCircle = hasHingeCircle;
+        HingePoints = hingePoints.ToList().AsReadOnly();
         Attributes = new Dictionary<string, string>(attributes, StringComparer.OrdinalIgnoreCase);
     }
 }
