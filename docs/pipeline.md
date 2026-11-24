@@ -1,6 +1,6 @@
 # Centerline pipeline {#pipeline}
 
-`DxfToRevit.Core.Services.DxfCenterLinePipeline` turns the wall lines of a DXF drawing into
+`DxfToRevit.Core.Dxf.DxfCenterLinePipeline` turns the wall lines of a DXF drawing into
 centerlines and closed wall footprints, and reads the columns. `Analyze(path)` returns the
 result without writing anything; `Run(path, output)` also writes the simulation DXF.
 

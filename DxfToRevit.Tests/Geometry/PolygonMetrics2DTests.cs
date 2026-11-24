@@ -1,6 +1,5 @@
 using DxfToRevit.Core.Geometry;
 using netDxf;
-using Xunit;
 
 namespace DxfToRevit.Tests.Geometry;
 

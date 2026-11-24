@@ -35,6 +35,7 @@ DxfToRevit builds the Revit model from it.
 | 15 | Importing the same drawing twice gave no message | Revit's overlap warnings are collected and shown first in the summary | `RevitWarningLog`, `RevitBatchResult` |
 | 16 | Adding elements to an imported drawing meant importing everything again | Category check boxes; elements already in the model are skipped and host the new doors and windows | `ExistingElementMatcher`, `RevitExistingElementReader`, `ImportSelectionPreferences` |
 | 17 | Floors, rooms and roofs are next; every element type was wired in by hand | Every kind of element is an import module run by a coordinator | `IImportModule`, `ImportCoordinator`, `ImportModuleCatalog` |
+| 18 | Mixed folder conventions, several types per file, outdated names | Folders and namespaces by feature, one type per file, sorted usings | (structure only) |
 
 ## Classes by need (short)
 
@@ -52,7 +53,7 @@ DxfToRevit builds the Revit model from it.
 | Describe what to build, independent of Revit | `WallCreationRequest`, `ColumnCreationRequest`, `OpeningCreationRequest`, their factories and validators, `BuildingModelService` |
 | Decide Revit details without the API (testable) | `LengthUnitConverter`, the `*CreateArgsMapper`s, `LevelMatchPlanner`, `WallTypeMatchPlanner`, `ColumnTypeMatchPlanner`, `OpeningOrientationPlanner`, `OpeningTypeKey` |
 | Write to Revit | `RevitApiDocumentContext`, `RevitElementResolver`, `RevitColumnPlacement`, `RevitFreeformColumnFamilyBuilder`, `RevitImportBatch` |
-| User interface | `DxfToRevitApplication`, `ImportDxfCommand`, `ColumnImportSettingsForm`, `OpeningTypeMapForm`, the preferences classes |
+| User interface | `DxfToRevitApplication`, `ImportDxfCommand`, `ImportSettingsForm`, `OpeningTypeMapForm`, the preferences classes |
 
 ---
 
@@ -384,6 +385,33 @@ in-memory creators.
   another kind (a section for extrusion roofs) would be a separate ribbon command reusing the same
   pattern.
 
+## Stage 18 - Folders by feature, one type per file
+
+**Requirement.** The structure should be modular, easy to extend and easy to read. Walls and
+columns were spread over technical folders (`Dxf`, `Models`, `Rules`, `Services`, `Geometry`,
+`Building`) while openings had their own folder; 30 files held several types; some names no longer
+matched what the classes do.
+
+**Decision.** Organise the core by feature, as the import modules are. No behaviour changes: the
+same tests pass (309 core, 88 Revit adapter tests), the build has no warnings.
+
+- Core folders and namespaces: `Walls`, `Columns`, `Openings` (each with its rule, reading,
+  interpretation, requests, validation, creator interface and import module), `Import` (the
+  modular import, session options, placement, elements already in the model,
+  `BuildingModelService`), `Dxf` (loading, line extraction, the analysis pipeline, the simulation
+  output), `Geometry` (shared 2D algorithms), `InMemory`, `Composition`. The old `Building`,
+  `Models`, `Rules`, `Services` and `IO` folders are gone. Files were moved with `git mv`, so their
+  history is kept.
+- One type per file: 30 files were split with a small Roslyn tool (doc comments travel with their
+  types); `RevitImportBatch.cs` was split by hand because of its `#if` block.
+- Test folders mirror the core folders; `LengthUnitConverterTests` moved to the Revit adapter
+  tests, next to the class it tests.
+- Unused `using` directives were removed (IDE0005) and every using block is sorted. Revit
+  sources are compiled twice (without and with `REVIT_API_AVAILABLE`), so usings needed only by
+  the Revit API code were kept.
+- Renamed: `ColumnImportSettingsForm` → `ImportSettingsForm`, `ColumnSettingsCommand` →
+  `SettingsCommand` (the ribbon button keeps its internal name).
+
 ---
 
 # Part 3 - Class reference by need
@@ -497,7 +525,7 @@ the generated API reference.
 |-------|---------------|-------------------|
 | `DxfToRevitApplication` | Ribbon tab with themed icons | `OnStartup` |
 | `ImportDxfCommand` | The import: DXF → analysis → settings → requests → batch → summary | `Execute` |
-| `ColumnSettingsCommand`, `AboutCommand` | Settings without importing; about box | `Execute` |
-| `ColumnImportSettingsForm` | Levels, column modes, openings on/off, DXF summary | `SelectedBaseLevelName`, `IncludeOpenings`, … |
+| `SettingsCommand`, `AboutCommand` | Settings without importing; about box | `Execute` |
+| `ImportSettingsForm` | Categories to import, levels, column modes, DXF summary | `IncludedCategoryKeys`, `SkipExisting`, `SelectedBaseLevelName`, … |
 | `OpeningTypeMapForm` | Map DXF codes to Revit types, default heights | right-click type menu, load/save file |
 | `ColumnImportPreferences`, `OpeningImportPreferences` | Remember choices for the Revit session | `CreateRegistry()` |

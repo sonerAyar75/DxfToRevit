@@ -1,5 +1,4 @@
-using DxfToRevit.Core.Building;
-using DxfToRevit.Revit;
+using DxfToRevit.Core.Walls;
 using netDxf;
 
 namespace DxfToRevit.Revit.Tests.Integration;

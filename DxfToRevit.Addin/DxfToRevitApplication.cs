@@ -1,5 +1,5 @@
-using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
+using Autodesk.Revit.UI;
 using System.IO;
 using System.Reflection;
 using System.Windows.Media.Imaging;
@@ -49,7 +49,7 @@ public sealed class DxfToRevitApplication : IExternalApplication
             "ImportDxf");
 
         AddButton(panel, assemblyPath, "ColumnSettings", "Settings",
-            typeof(ColumnSettingsCommand),
+            typeof(SettingsCommand),
             "Choose what to import, the levels, the column options and the door and window types.",
             "Settings");
 

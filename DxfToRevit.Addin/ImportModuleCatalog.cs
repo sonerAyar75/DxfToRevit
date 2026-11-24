@@ -1,6 +1,8 @@
-using DxfToRevit.Core.Building;
+using DxfToRevit.Core.Columns;
+using DxfToRevit.Core.Dxf;
 using DxfToRevit.Core.Import;
-using DxfToRevit.Core.Services;
+using DxfToRevit.Core.Openings;
+using DxfToRevit.Core.Walls;
 using DxfToRevit.Revit;
 
 namespace DxfToRevit.Addin;

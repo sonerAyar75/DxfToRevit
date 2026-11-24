@@ -1,4 +1,5 @@
-using DxfToRevit.Core.Building;
+using DxfToRevit.Core.Columns;
+using DxfToRevit.Core.Walls;
 
 namespace DxfToRevit.Revit;
 

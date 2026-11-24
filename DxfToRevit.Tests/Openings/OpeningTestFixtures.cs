@@ -1,6 +1,6 @@
 using DxfToRevit.Core.Geometry;
-using DxfToRevit.Core.Models;
 using DxfToRevit.Core.Openings;
+using DxfToRevit.Core.Walls;
 using netDxf;
 
 namespace DxfToRevit.Tests.Openings;

@@ -1,25 +1,5 @@
 namespace DxfToRevit.Revit;
 
-/// <summary>Kind of a Revit warning raised while committing an import.</summary>
-public enum RevitWarningKind
-{
-    /// <summary>
-    /// New elements overlap or duplicate elements in the model (overlapping walls, identical
-    /// instances in the same place): usually the same drawing imported twice at the same place.
-    /// </summary>
-    Overlap,
-
-    /// <summary>Any other warning.</summary>
-    Other
-}
-
-/// <summary>Warnings with the same kind and text, counted together.</summary>
-/// <param name="Kind">Warning kind.</param>
-/// <param name="Text">Revit's description text.</param>
-/// <param name="Count">How many times Revit raised it.</param>
-/// <param name="ElementCount">Number of distinct elements involved.</param>
-public sealed record RevitWarningGroup(RevitWarningKind Kind, string Text, int Count, int ElementCount);
-
 /// <summary>
 /// Collects the warnings Revit raises at the commit of an import. The batch suppresses warnings so
 /// Revit shows no dialog per element; this log keeps them, grouped, for the import summary.

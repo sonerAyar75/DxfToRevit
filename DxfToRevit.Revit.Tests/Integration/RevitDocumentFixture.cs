@@ -1,5 +1,3 @@
-using DxfToRevit.Revit;
-
 namespace DxfToRevit.Revit.Tests.Integration;
 
 /// <summary>

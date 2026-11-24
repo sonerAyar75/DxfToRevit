@@ -1,10 +1,10 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using DxfToRevit.Core.Building;
+using DxfToRevit.Core.Columns;
+using DxfToRevit.Core.Dxf;
 using DxfToRevit.Core.Import;
 using DxfToRevit.Core.Openings;
-using DxfToRevit.Core.Services;
 using DxfToRevit.Revit;
 using System.Text;
 
@@ -65,7 +65,7 @@ public sealed class ImportDxfCommand : IExternalCommand
             return Result.Cancelled;
         }
 
-        using var settingsForm = new ColumnImportSettingsForm(
+        using var settingsForm = new ImportSettingsForm(
             doc, choices, System.IO.Path.GetFileName(path), OpeningCodeSummary.Build(pipe.Openings));
         if (settingsForm.ShowDialog() != System.Windows.Forms.DialogResult.OK)
             return Result.Cancelled;

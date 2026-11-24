@@ -1,9 +1,7 @@
-using System.Drawing;
-using System.Windows.Forms;
-using DxfToRevit.Core.Building;
-using DxfToRevit.Core.IO;
 using DxfToRevit.Core.Openings;
 using DxfToRevit.Revit;
+using System.Drawing;
+using System.Windows.Forms;
 
 namespace DxfToRevit.Addin;
 

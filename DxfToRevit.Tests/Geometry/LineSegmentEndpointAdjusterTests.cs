@@ -1,9 +1,8 @@
 ﻿
 using DxfToRevit.Core.Geometry;
 using netDxf;
-using Xunit;
 
-namespace DxfToRevit.Tests.Core.Geometry;
+namespace DxfToRevit.Tests.Geometry;
 
 /// <summary>
 /// Endpoint extension at L/T junctions: rules for moving endpoints onto the intersection.

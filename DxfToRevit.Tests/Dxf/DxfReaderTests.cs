@@ -1,8 +1,7 @@
 ﻿
 using DxfToRevit.Core.Dxf;
-using Xunit;
-using netDxf;
 using netDxf.Entities;
+using netDxf;
 
 namespace DxfToRevit.Tests.Dxf;
 

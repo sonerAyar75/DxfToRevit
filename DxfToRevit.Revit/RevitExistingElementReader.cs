@@ -1,6 +1,6 @@
 #if REVIT_API_AVAILABLE
 using Autodesk.Revit.DB;
-using DxfToRevit.Core.Building;
+using DxfToRevit.Core.Import;
 using DxfToRevit.Core.Openings;
 
 namespace DxfToRevit.Revit;

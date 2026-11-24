@@ -1,4 +1,4 @@
-using DxfToRevit.Core.Building;
+using DxfToRevit.Core.Openings;
 
 namespace DxfToRevit.Revit;
 

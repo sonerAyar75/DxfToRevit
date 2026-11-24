@@ -2,35 +2,6 @@ using System.Globalization;
 
 namespace DxfToRevit.Revit;
 
-/// <summary>API-free summary of a Revit wall type used by <see cref="WallTypeMatchPlanner"/>.</summary>
-/// <param name="Name">Type name (e.g. <c>Generic - 200mm</c>).</param>
-/// <param name="FamilyName">Family name (e.g. <c>Basic Wall</c>).</param>
-/// <param name="WidthMm">Total wall width in millimetres.</param>
-/// <param name="LayerCount">Number of compound structure layers (0 when unknown).</param>
-public readonly record struct WallTypeCandidate(string Name, string FamilyName, double WidthMm, int LayerCount);
-
-/// <summary>How a wall type was matched.</summary>
-public enum WallTypeMatchKind
-{
-    /// <summary>No type or family matched the key.</summary>
-    NotFound,
-
-    /// <summary>The key equals a type name (thickness is not checked).</summary>
-    ExactName,
-
-    /// <summary>The key is a family name and a type with the right thickness exists.</summary>
-    FamilyWidthMatch,
-
-    /// <summary>The family exists but no type has the thickness; a type should be duplicated and resized.</summary>
-    DuplicateFromFamily
-}
-
-/// <summary>Planner output.</summary>
-/// <param name="Kind">Kind of match.</param>
-/// <param name="Index">Index into the candidate list (-1 when not found).</param>
-/// <param name="NewTypeName">Name for the duplicated type when <paramref name="Kind"/> is <see cref="WallTypeMatchKind.DuplicateFromFamily"/>.</param>
-public readonly record struct WallTypeMatch(WallTypeMatchKind Kind, int Index, string? NewTypeName = null);
-
 /// <summary>
 /// Decides which wall type to use for a type key and thickness (no Revit API needed).
 /// </summary>

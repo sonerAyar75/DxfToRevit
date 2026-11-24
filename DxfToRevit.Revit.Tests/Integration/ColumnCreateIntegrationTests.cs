@@ -1,5 +1,5 @@
-using DxfToRevit.Core.Building;
-using DxfToRevit.Revit;
+using DxfToRevit.Core.Columns;
+using DxfToRevit.Core.Import;
 using netDxf;
 
 namespace DxfToRevit.Revit.Tests.Integration;

@@ -3,38 +3,6 @@ using System.Globalization;
 namespace DxfToRevit.Revit;
 
 /// <summary>
-/// API-free summary of a Revit column family type used by <see cref="ColumnTypeMatchPlanner"/>.
-/// Dimensions that cannot be read are <see cref="double.NaN"/>.
-/// </summary>
-/// <param name="Name">Type name.</param>
-/// <param name="FamilyName">Family name.</param>
-/// <param name="WidthMm">Width (or diameter) in millimetres.</param>
-/// <param name="DepthMm">Depth (or diameter) in millimetres.</param>
-public readonly record struct ColumnTypeCandidate(string Name, string FamilyName, double WidthMm, double DepthMm);
-
-/// <summary>How a column type was matched.</summary>
-public enum ColumnTypeMatchKind
-{
-    /// <summary>No type or family matched the key.</summary>
-    NotFound,
-
-    /// <summary>The key equals a type name (dimensions are not checked).</summary>
-    ExactName,
-
-    /// <summary>The key is a family name and a type with the right dimensions exists.</summary>
-    FamilySizeMatch,
-
-    /// <summary>The family exists but no type has the dimensions; a type should be duplicated and resized.</summary>
-    DuplicateFromFamily
-}
-
-/// <summary>Planner output.</summary>
-/// <param name="Kind">Kind of match.</param>
-/// <param name="Index">Index into the candidate list (-1 when not found).</param>
-/// <param name="NewTypeName">Name for the duplicated type when <paramref name="Kind"/> is <see cref="ColumnTypeMatchKind.DuplicateFromFamily"/>.</param>
-public readonly record struct ColumnTypeMatch(ColumnTypeMatchKind Kind, int Index, string? NewTypeName = null);
-
-/// <summary>
 /// Decides which column type to use (no Revit API needed). Same strategy as
 /// <see cref="WallTypeMatchPlanner"/>: type name → family with matching size → duplicate a family type.
 /// </summary>

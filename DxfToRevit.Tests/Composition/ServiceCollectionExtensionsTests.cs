@@ -1,10 +1,9 @@
-using DxfToRevit.Core.Building;
-using DxfToRevit.Core.Building.InMemory;
 using DxfToRevit.Core.Composition;
-using DxfToRevit.Core.Services;
+using DxfToRevit.Core.Dxf;
+using DxfToRevit.Core.InMemory;
+using DxfToRevit.Core.Walls;
 using Microsoft.Extensions.DependencyInjection;
 using netDxf;
-using Xunit;
 
 namespace DxfToRevit.Tests.Composition;
 

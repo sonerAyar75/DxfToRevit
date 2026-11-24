@@ -10,23 +10,28 @@ DxfToRevit.App / DxfToRevit.Console        DxfToRevit.Addin (Revit 2025)
               │                                   │  compiles DxfToRevit.Revit sources
               ▼                                   ▼  with REVIT_API_AVAILABLE
         DxfToRevit.Core  ◄─────────────────  DxfToRevit.Revit
-   Dxf · Geometry · Models · Rules         planners (API-free) · RevitApiDocumentContext
-   Services · IO · Building · Composition  RevitElementResolver · family builders
+   Walls · Columns · Openings              planners (API-free) · RevitApiDocumentContext
+   Import · Dxf · Geometry · InMemory      RevitElementResolver · family builders
 ```
+
+The core is organised **by feature**: every kind of element keeps everything it needs in its own
+folder and namespace, from the layer or block rule to the import module. Shared parts have their
+own folders. Folders and namespaces match, and every file holds one type.
 
 | Namespace | Responsibility |
 |-----------|----------------|
-| `DxfToRevit.Core.Dxf` | Loading DXF files (`DxfReader`), extracting lines (`DxfGeometryReader`) and columns (`DxfColumnReader`) |
-| `DxfToRevit.Core.Rules` | Layer naming conventions (`WallLayerRule`, `ColumnLayerRule`) |
-| `DxfToRevit.Core.Models` | Immutable data: raw/classified lines, face pairs, walls, footprints, columns |
-| `DxfToRevit.Core.Geometry` | Pure 2D algorithms: segments, overlaps, junctions, bridging, merging, polygons |
-| `DxfToRevit.Core.Services` | Line classification, face pairing, wall models and the end-to-end pipeline |
-| `DxfToRevit.Core.IO` | Writing the DXF simulation output |
-| `DxfToRevit.Core.Building` | Host-independent creation API: requests, factories, validators, creator interfaces |
-| `DxfToRevit.Core.Building.InMemory` | In-memory host used by tests and simulations |
+| `DxfToRevit.Core.Walls` | Wall layer rule, line classification, face pairing, centerlines, junctions, bridging, footprints, wall requests and validation, `IWallCreator`, `WallImportModule` |
+| `DxfToRevit.Core.Columns` | Column layer rule, `DxfColumnReader`, column models, requests and validation, `IColumnCreator`, `ColumnImportModule` |
+| `DxfToRevit.Core.Openings` | Door, window and opening definitions (block rules), marker reading, wall matching, hinge interpretation, type map, requests and validation, `IOpeningCreator`, `OpeningImportModule` |
+| `DxfToRevit.Core.Import` | The modular import (`IImportModule`, `ImportCoordinator`), session options, placement, elements already in the model, `BuildingModelService` |
+| `DxfToRevit.Core.Dxf` | Loading DXF files (`DxfReader`), extracting lines, dynamic block names, the analysis pipeline and the simulation output |
+| `DxfToRevit.Core.Geometry` | Pure 2D algorithms shared by the features: segments, overlaps, intersections, polygons, tolerances |
+| `DxfToRevit.Core.InMemory` | In-memory host used by tests and simulations |
 | `DxfToRevit.Core.Composition` | Dependency injection registrations |
 | `DxfToRevit.Revit` | Revit adapter: unit conversion, create-argument planners, document context, resolvers |
-| `DxfToRevit.Addin` | Ribbon application, commands, settings dialog |
+| `DxfToRevit.Addin` | Ribbon application, commands, settings dialog, module catalog |
+
+A new kind of element (for example floors) is a new feature folder; see @ref import_modules.
 
 ## Design principles
 

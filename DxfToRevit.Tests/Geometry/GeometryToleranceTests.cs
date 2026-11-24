@@ -1,5 +1,4 @@
 using DxfToRevit.Core.Geometry;
-using Xunit;
 
 namespace DxfToRevit.Tests.Geometry;
 

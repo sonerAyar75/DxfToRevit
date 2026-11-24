@@ -1,19 +1,5 @@
 namespace DxfToRevit.Core.Import;
 
-/// <summary>Outcome of one creation request.</summary>
-/// <param name="RequestId">Request id, for example <c>W001</c>.</param>
-/// <param name="Success">Whether the element was created.</param>
-/// <param name="ElementId">Id of the created element; <c>null</c> when it was not created.</param>
-/// <param name="Message">Failure reason, or a note for a created element.</param>
-public sealed record ImportEntry(string RequestId, bool Success, string? ElementId, string? Message);
-
-/// <summary>A titled list of lines a module adds to the import summary (for example marker warnings).</summary>
-/// <param name="Title">Section title, without the count.</param>
-/// <param name="Count">Number shown after the title.</param>
-/// <param name="Lines">Lines of the section.</param>
-/// <param name="IsError">Whether the section means that something was not imported.</param>
-public sealed record ImportReportSection(string Title, int Count, IReadOnlyList<string> Lines, bool IsError);
-
 /// <summary>What a module created, failed to create and wants to report.</summary>
 public sealed class ImportModuleResult
 {

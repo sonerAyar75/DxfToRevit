@@ -1,12 +1,8 @@
 ﻿
 using DxfToRevit.Core.Dxf;
 using DxfToRevit.Core.Geometry;
-using DxfToRevit.Core.Models;
-using DxfToRevit.Core.Services;
+using DxfToRevit.Core.Walls;
 using netDxf;
-using netDxf.Tables;
-using netDxf.Entities;
-using DxfToRevit.Core.IO;
 
 namespace DxfToRevit.Tests.Walls;
 

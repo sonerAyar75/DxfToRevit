@@ -1,8 +1,7 @@
 using DxfToRevit.Core.Geometry;
-using DxfToRevit.Core.Models;
 using DxfToRevit.Core.Openings;
+using DxfToRevit.Core.Walls;
 using netDxf;
-using Xunit;
 using static DxfToRevit.Tests.Openings.OpeningTestFixtures;
 
 namespace DxfToRevit.Tests.Openings;
