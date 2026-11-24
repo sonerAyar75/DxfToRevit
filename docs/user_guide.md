@@ -153,7 +153,7 @@ If you switch the circle position with **visibility states** of a dynamic block 
    set the default heights.
 4. Click **Continue**. All elements are created in one step; the summary appears at the end.
 
-The choices are remembered until Revit is closed. **Column Settings** on the ribbon opens the
+The choices are remembered until Revit is closed. **Settings** on the ribbon opens the
 same settings without importing.
 
 ### Importing an updated drawing

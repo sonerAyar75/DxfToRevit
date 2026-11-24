@@ -18,8 +18,8 @@ public sealed class AboutCommand : IExternalCommand
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
         TaskDialog.Show("About DxfToRevit",
-            "DxfToRevit\nDXF geometry import for Autodesk Revit.\n\n" +
-            "Imports recognized wall and column geometry into the active Revit project.");
+            "DxfToRevit\nDXF import for Autodesk Revit.\n\n" +
+            "Imports walls, columns, doors, windows and openings from a 2D DXF drawing into the active Revit project.");
         return Result.Succeeded;
     }
 }

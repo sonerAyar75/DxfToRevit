@@ -1,6 +1,6 @@
 # DxfToRevit {#mainpage}
 
-**DxfToRevit** turns 2D architectural DXF drawings into Autodesk Revit walls and columns.
+**DxfToRevit** turns 2D architectural DXF drawings into Autodesk Revit walls, columns, doors, windows and openings.
 It reads wall face lines and column outlines from layer-coded DXF files, computes wall
 centerlines with correct L/T junctions, and creates native Revit elements bound to levels.
 

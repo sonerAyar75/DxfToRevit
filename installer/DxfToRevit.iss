@@ -27,7 +27,7 @@
 
 #define AppName        "DxfToRevit"
 #define AppPublisher   "SonerAyar"
-#define AppDescription "DXF wall and column import for Autodesk Revit"
+#define AppDescription "DXF import of walls, columns, doors, windows and openings for Autodesk Revit"
 #define AddinDll       SourceDir + "\DxfToRevit.Addin.dll"
 
 #if !FileExists(AddinDll)

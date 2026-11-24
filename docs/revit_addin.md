@@ -9,8 +9,8 @@
 
 | Button | Command | Purpose |
 |--------|---------|---------|
-| Import DXF | `ImportDxfCommand` | Imports walls and columns from a DXF file |
-| Column Settings | `ColumnSettingsCommand` | Opens the settings dialog on its own (choose options, load families) |
+| Import DXF | `ImportDxfCommand` | Imports walls, columns, doors, windows and openings from a DXF file |
+| Settings | `ColumnSettingsCommand` | Opens the settings dialog on its own (choose options, load families) |
 | About | `AboutCommand` | Short description |
 
 Icons exist in light and dark variants (`Resources/<Name>_<Light|Dark>_<16|32>.png`). The current
