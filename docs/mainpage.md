@@ -8,6 +8,7 @@ centerlines with correct L/T junctions, and creates native Revit elements bound 
 
 | Page | Contents |
 |------|----------|
+| @subpage user_guide | For users: preparing the drawing in AutoCAD, importing into Revit, the type map file, the summary |
 | @subpage architecture | Projects, layers, dependencies and the main types |
 | @subpage pipeline | The DXF → centerline → footprint algorithm, stage by stage |
 | @subpage columns | How column sections are classified and created in Revit |
