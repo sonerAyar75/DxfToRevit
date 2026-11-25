@@ -7,7 +7,7 @@
 // Exit code: 0 on success, 1 on a usage error or failure.
 
 using DxfToRevit.Core.Composition;
-using DxfToRevit.Core.Services;
+using DxfToRevit.Core.Dxf;
 using Microsoft.Extensions.DependencyInjection;
 
 if (args.Length < 1)

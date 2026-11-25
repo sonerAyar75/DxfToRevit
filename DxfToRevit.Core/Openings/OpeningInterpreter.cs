@@ -1,13 +1,7 @@
-using DxfToRevit.Core.Geometry;
-using DxfToRevit.Core.Models;
+using DxfToRevit.Core.Walls;
 using netDxf;
 
 namespace DxfToRevit.Core.Openings;
-
-/// <summary>Result of <see cref="OpeningInterpreter.Interpret"/>.</summary>
-/// <param name="Openings">Openings that can be created, in marker order.</param>
-/// <param name="Issues">Errors (opening skipped) and warnings (opening created).</param>
-public sealed record OpeningInterpretation(IReadOnlyList<OpeningModel> Openings, IReadOnlyList<OpeningIssue> Issues);
 
 /// <summary>
 /// Turns opening markers into <see cref="OpeningModel"/>s on the final wall footprints:

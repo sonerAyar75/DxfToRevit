@@ -1,5 +1,5 @@
 using DxfToRevit.Core.Geometry;
-using DxfToRevit.Core.Models;
+using DxfToRevit.Core.Walls;
 
 namespace DxfToRevit.Core.Openings;
 

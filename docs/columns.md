@@ -27,7 +27,7 @@ height. Structural columns use `StructuralType.Column`.
 ### Rectangular
 
 A loaded rectangular column type with the right width and depth is used; otherwise a type of the
-chosen family is duplicated and resized (`RevitElementResolver`). The instance is then rotated
+chosen family is duplicated and resized (`RevitColumnTypeResolver`). The instance is then rotated
 about its vertical axis by the plan rotation.
 
 ### Circular

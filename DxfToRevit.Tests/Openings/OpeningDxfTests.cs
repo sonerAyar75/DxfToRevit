@@ -1,8 +1,6 @@
 using DxfToRevit.Core.Dxf;
 using DxfToRevit.Core.Openings;
-using DxfToRevit.Core.Services;
 using netDxf;
-using Xunit;
 using static DxfToRevit.Tests.Openings.OpeningTestFixtures;
 
 namespace DxfToRevit.Tests.Openings;
@@ -33,7 +31,6 @@ public sealed class OpeningDxfTests
         });
     }
 
-    /// <summary>The pipeline attaches the doors to their walls with the dynamic block widths and no errors.</summary>
     /// <summary>Circles hidden by a visibility state (invisible flag) are not hinge marks.</summary>
     [Fact]
     public void ReadMarkers_HiddenCircles_AreIgnored()
@@ -57,6 +54,7 @@ public sealed class OpeningDxfTests
         Assert.Equal(2000, hinge.Y, 6);
     }
 
+    /// <summary>The pipeline attaches the doors to their walls with the dynamic block widths and no errors.</summary>
     [Fact]
     public void Analyze_SampleFile_CreatesDoorsWithBlockWidths()
     {

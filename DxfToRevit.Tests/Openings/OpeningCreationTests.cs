@@ -1,10 +1,8 @@
-using DxfToRevit.Core.Building;
-using DxfToRevit.Core.Building.InMemory;
-using DxfToRevit.Core.IO;
-using DxfToRevit.Core.Models;
+using DxfToRevit.Core.Import;
+using DxfToRevit.Core.InMemory;
 using DxfToRevit.Core.Openings;
+using DxfToRevit.Core.Walls;
 using netDxf;
-using Xunit;
 using static DxfToRevit.Tests.Openings.OpeningTestFixtures;
 
 namespace DxfToRevit.Tests.Openings;

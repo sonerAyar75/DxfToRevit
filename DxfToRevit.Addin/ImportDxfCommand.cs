@@ -1,10 +1,11 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using DxfToRevit.Core.Building;
-using DxfToRevit.Core.Openings;
-using DxfToRevit.Core.Services;
-using DxfToRevit.Revit;
+using DxfToRevit.Addin.Settings;
+using DxfToRevit.Core.Dxf;
+using DxfToRevit.Core.Import;
+using DxfToRevit.Revit.Common;
+using DxfToRevit.Revit.Import;
 using System.Text;
 
 namespace DxfToRevit.Addin;
@@ -14,10 +15,10 @@ namespace DxfToRevit.Addin;
 /// into the active project.
 /// </summary>
 /// <remarks>
-/// Flow: DXF file selection → pipeline analysis (no files are written) → settings dialog (levels,
-/// height, column options, and the door/window codes found in the DXF mapped to Revit types) →
-/// wall, column and opening requests → creation through
-/// <see cref="BuildingModelService"/> with the Revit creators (openings last, in their host walls) →
+/// Flow: DXF file selection → pipeline analysis (no files are written) → settings dialog (the
+/// categories of the modules of <see cref="ImportModuleCatalog"/>, levels, height, column options,
+/// and the door/window codes found in the DXF mapped to Revit types) → <see cref="ImportCoordinator"/>
+/// plans every module (requests, elements already in the model) → creation in module order →
 /// summary dialog. All elements are written in one batch transaction (<see cref="RevitImportBatch"/>):
 /// one sub-transaction per element, one commit, one undo step; rolled back when nothing was created.
 /// </remarks>
@@ -48,141 +49,59 @@ public sealed class ImportDxfCommand : IExternalCommand
         if (path is null)
             return Result.Cancelled;
 
-        (double, double, double, double) heightsUsed = CurrentDefaultHeights();
-        if (!TryAnalyze(path, out DxfCenterLinePipeline.Result pipe, ref message))
+        ImportSettings settings = ImportSettings.Session;
+        var heightsUsed = settings.Openings.DefaultHeights;
+        if (!TryAnalyze(path, settings, out DxfDrawing drawing, ref message))
             return Result.Failed;
 
-        if (pipe.WallSolids.Count == 0 && pipe.Columns.Count == 0)
+        var context = new RevitApiDocumentContext(doc);
+        var coordinator = new ImportCoordinator(ImportModuleCatalog.Create(context));
+        IReadOnlyList<ImportCategoryChoice> choices = ImportModuleCatalog.Choices(coordinator.Modules, drawing);
+
+        if (choices.All(c => c.Count == 0))
         {
             TaskDialog.Show("DxfToRevit",
                 $"Nothing to import from this DXF.\n" +
-                $"Wall lines: {pipe.WallLineCount}, face pairs: {pipe.PairCount}, ambiguities: {pipe.AmbiguityCount}, columns: {pipe.ColumnCount}.");
+                $"Wall lines: {drawing.Analysis.WallLineCount}, face pairs: {drawing.Analysis.PairCount}, ambiguities: {drawing.Analysis.AmbiguityCount}, columns: {drawing.Analysis.ColumnCount}.");
             return Result.Cancelled;
         }
 
-        int OpeningCount(OpeningCategory category) => pipe.Openings.Count(o => o.Definition.Category == category);
-        var counts = new ImportCounts(
-            pipe.WallSolids.Count, pipe.Columns.Count,
-            OpeningCount(OpeningCategory.Door), OpeningCount(OpeningCategory.Window), OpeningCount(OpeningCategory.EmptyOpening));
-
-        using var settingsForm = new ColumnImportSettingsForm(
-            doc, System.IO.Path.GetFileName(path), OpeningCodeSummary.Build(pipe.Openings), counts);
+        using var settingsForm = new ImportSettingsForm(
+            settings, doc, choices, ImportModuleCatalog.CreateSettingsSections(settings, drawing),
+            System.IO.Path.GetFileName(path));
         if (settingsForm.ShowDialog() != System.Windows.Forms.DialogResult.OK)
             return Result.Cancelled;
 
         // Default heights only matter for blocks without height attributes; re-read when they changed.
-        if (CurrentDefaultHeights() != heightsUsed && !TryAnalyze(path, out pipe, ref message))
+        if (settings.Openings.DefaultHeights != heightsUsed && !TryAnalyze(path, settings, out drawing, ref message))
             return Result.Failed;
 
         var session = new ImportSessionOptions(
-            baseLevelName: settingsForm.SelectedBaseLevelName,
-            defaultHeightMm: settingsForm.UnconnectedHeightMm,
+            baseLevelName: settingsForm.Levels.SelectedBaseLevelName,
+            defaultHeightMm: settingsForm.Levels.UnconnectedHeightMm,
             defaultColumnTypeKey: RectangularColumnFamily,
             columnsAreStructural: false,
-            topLevelName: settingsForm.SelectedTopLevelName);
+            topLevelName: settingsForm.Levels.SelectedTopLevelName);
 
-        IReadOnlyList<WallCreationRequest> wallRequests =
-            new WallCreationRequestFactory(session).FromWallSolids(pipe.WallSolids);
+        ImportBag options = ImportModuleCatalog.CreateModuleOptions(settings);
 
-        var columnFactory = new ColumnCreationRequestFactory(session)
-        {
-            CircularColumnTypeKey = settingsForm.UseRoundSolidForCircularColumns
-                ? ColumnTypeKeys.RoundDirectShape
-                : settingsForm.SelectedCircularTypeKey ?? ColumnTypeKeys.AutoRoundFamily,
-            ConvertCircularToSquare = settingsForm.UseSquareForCircularColumns,
-            SquareColumnTypeKey = settingsForm.SelectedSquareTypeKey,
-            FreeformColumnTypeKey = settingsForm.FreeformAsFamily
-                ? ColumnTypeKeys.FreeformFamily
-                : "Freeform Column"
-        };
+        // Compute first: every module builds its requests and sets aside what is already in the
+        // model (existing walls also host the new doors and windows). Nothing is written yet.
+        coordinator.Plan(new ImportPlanContext(
+            drawing, session, new ExistingElementMatcher(RevitExistingElementReader.Read(doc)),
+            settingsForm.IncludedCategoryKeys, settingsForm.SkipExisting, options));
 
-        IReadOnlyList<ColumnCreationRequest> columnRequests = !settingsForm.IncludeColumns
-            ? Array.Empty<ColumnCreationRequest>()
-            : columnFactory
-                .FromColumnModels(pipe.Columns)
-                .Where(request => request.Type.SectionKind switch
-                {
-                    ColumnSectionKind.Circular => settingsForm.IncludeCircularColumns,
-                    ColumnSectionKind.Freeform => settingsForm.IncludeFreeformColumns,
-                    _ => true
-                })
-                .ToList();
-
-        var context = new RevitApiDocumentContext(doc);
-        var service = new BuildingModelService(
-            new RevitWallCreator(context),
-            new RevitColumnCreator(context),
-            openingCreator: new RevitOpeningCreator(context));
-
-        IReadOnlyList<OpeningCreationRequest> openingRequests = settingsForm.IncludeAnyOpening
-            ? new OpeningCreationRequestFactory(session, OpeningImportPreferences.TypeMap)
-                .FromOpeningModels(pipe.Openings)
-                .Where(r => r.Category switch
-                {
-                    OpeningCategory.Door => settingsForm.IncludeDoors,
-                    OpeningCategory.Window => settingsForm.IncludeWindows,
-                    _ => settingsForm.IncludeEmptyOpenings
-                })
-                .ToList()
-            : Array.Empty<OpeningCreationRequest>();
-
-        // Elements already in the model: always used to host doors and windows in existing walls;
-        // skipped (not created again) when the user asked for it.
-        var matcher = new ExistingElementMatcher(RevitExistingElementReader.Read(doc));
-        ExistingSplit<WallCreationRequest> walls =
-            ExistingElementMatcher.Split(wallRequests, r => r.Id, matcher.FindWall);
-        bool skip = settingsForm.SkipExisting;
-        var skipped = new SkippedCounts(
-            settingsForm.IncludeWalls && skip ? walls.Existing.Count : 0, 0, 0, 0, 0);
-
-        IReadOnlyList<WallCreationRequest> wallsToCreate = !settingsForm.IncludeWalls
-            ? Array.Empty<WallCreationRequest>()
-            : skip ? walls.New : wallRequests;
-
-        if (skip)
-        {
-            ExistingSplit<ColumnCreationRequest> columns =
-                ExistingElementMatcher.Split(columnRequests, r => r.Id, matcher.FindColumn);
-            ExistingSplit<OpeningCreationRequest> openings =
-                ExistingElementMatcher.Split(openingRequests, r => r.Id, matcher.FindOpening);
-            IReadOnlyList<OpeningCreationRequest> allOpenings = openingRequests;
-            int Skipped(OpeningCategory category) =>
-                allOpenings.Count(r => r.Category == category && openings.Existing.ContainsKey(r.Id));
-
-            columnRequests = columns.New;
-            openingRequests = openings.New;
-            skipped = skipped with
-            {
-                Columns = columns.Existing.Count,
-                Doors = Skipped(OpeningCategory.Door),
-                Windows = Skipped(OpeningCategory.Window),
-                EmptyOpenings = Skipped(OpeningCategory.EmptyOpening)
-            };
-        }
-
-        IReadOnlyList<WallCreationResult> wallResults = Array.Empty<WallCreationResult>();
-        IReadOnlyList<ColumnCreationResult> columnResults = Array.Empty<ColumnCreationResult>();
-        IReadOnlyList<OpeningCreationResult> openingResults = Array.Empty<OpeningCreationResult>();
+        IReadOnlyList<ImportModuleResult> results = Array.Empty<ImportModuleResult>();
         IReadOnlyList<RevitWarningGroup> revitWarnings = Array.Empty<RevitWarningGroup>();
 
-        // One transaction group: a single undo step, rolled back when nothing could be created.
-        // Unit of work: everything was computed above; now all elements are written in one batch
-        // transaction (one regeneration and redraw, one undo step) instead of one transaction each.
+        // Then write: all elements in one batch transaction (one regeneration and redraw, one undo
+        // step), rolled back when nothing could be created.
         try
         {
             using RevitImportBatch batch = context.BeginBatch("DxfToRevit Import DXF");
+            results = coordinator.Create(batch.Regenerate);
 
-            wallResults = service.CreateWalls(wallsToCreate);
-            batch.Regenerate();   // walls must exist geometrically before columns join and openings are hosted
-            columnResults = service.CreateColumns(columnRequests);
-
-            // Openings need their host walls, so they are created last: in the walls created now,
-            // otherwise in the matching walls already in the model.
-            openingResults = service.CreateOpenings(openingRequests, MapHostWallIds(wallResults, walls.Existing));
-
-            bool hasSuccess = wallResults.Any(r => r.Success) || columnResults.Any(r => r.Success) ||
-                              openingResults.Any(r => r.Success);
-            if (hasSuccess)
+            if (results.Any(r => r.Created > 0))
             {
                 RevitBatchResult committed = batch.Commit();
                 if (!committed.Committed)
@@ -192,14 +111,9 @@ public sealed class ImportDxfCommand : IExternalCommand
                 }
 
                 revitWarnings = committed.Warnings;
-                wallResults = ApplyBatchOutcome(wallResults, committed,
-                    r => r.HostElementId, r => r.RequestId, (r, why) => WallCreationResult.Fail(r.RequestId, why), (r, _) => r);
-                columnResults = ApplyBatchOutcome(columnResults, committed,
-                    r => r.HostElementId, r => r.RequestId, (r, why) => ColumnCreationResult.Fail(r.RequestId, why), (r, _) => r);
-                openingResults = ApplyBatchOutcome(openingResults, committed,
-                    r => r.HostElementId, r => r.RequestId, (r, why) => OpeningCreationResult.Fail(r.RequestId, why),
-                    (r, note) => new OpeningCreationResult(r.RequestId, true, r.HostElementId,
-                        r.Message is null ? note : $"{r.Message} {note}"));
+                results = results.Select(r => r.WithCommitOutcome(
+                    id => committed.WasRemoved(id, out string reason) ? $"Removed by Revit when committing: {reason}" : null,
+                    committed.Notes)).ToList();
             }
 
             // Disposing an uncommitted batch rolls everything back.
@@ -210,42 +124,17 @@ public sealed class ImportDxfCommand : IExternalCommand
             return Result.Failed;
         }
 
-        ShowSummary(path, pipe, wallResults, columnResults, openingResults, settingsForm.IncludeAnyOpening,
-            revitWarnings, skipped);
-        bool anySuccess = wallResults.Any(r => r.Success) || columnResults.Any(r => r.Success) ||
-                          openingResults.Any(r => r.Success);
-        return anySuccess || skipped.Total > 0 ? Result.Succeeded : Result.Failed;
-    }
-
-    /// <summary>
-    /// Updates the creation results after the batch commit: elements that Revit removed while
-    /// resolving errors become failures with Revit's reason, and notes from the commit (door flips)
-    /// are attached to the successful results.
-    /// </summary>
-    private static IReadOnlyList<T> ApplyBatchOutcome<T>(
-        IReadOnlyList<T> results,
-        RevitBatchResult batch,
-        Func<T, string?> elementId,
-        Func<T, string> requestId,
-        Func<T, string, T> toFailure,
-        Func<T, string, T> withNote)
-    {
-        return results.Select(r =>
-        {
-            if (batch.WasRemoved(elementId(r), out string reason))
-                return toFailure(r, $"Removed by Revit when committing: {reason}");
-            return elementId(r) is not null && batch.Notes.TryGetValue(requestId(r), out string? note)
-                ? withNote(r, note)
-                : r;
-        }).ToList();
+        ShowSummary(path, drawing.Analysis, results, coordinator.Skipped, revitWarnings);
+        bool anySuccess = results.Any(r => r.Created > 0);
+        return anySuccess || coordinator.Skipped.Count > 0 ? Result.Succeeded : Result.Failed;
     }
 
     /// <summary>Runs the pipeline analysis with the current opening defaults; sets <paramref name="message"/> on failure.</summary>
-    private static bool TryAnalyze(string path, out DxfCenterLinePipeline.Result result, ref string message)
+    private static bool TryAnalyze(string path, ImportSettings settings, out DxfDrawing result, ref string message)
     {
         try
         {
-            result = new DxfCenterLinePipeline(OpeningImportPreferences.CreateRegistry()).Analyze(path);
+            result = new DxfCenterLinePipeline(settings.Openings.CreateRegistry(), LayerRules.Default).AnalyzeDrawing(path);
             return true;
         }
         catch (Exception ex)
@@ -255,11 +144,6 @@ public sealed class ImportDxfCommand : IExternalCommand
             return false;
         }
     }
-
-    /// <summary>The default opening heights currently chosen (door, window, sill, empty opening; cm).</summary>
-    private static (double, double, double, double) CurrentDefaultHeights() =>
-        (OpeningImportPreferences.DoorHeightCm, OpeningImportPreferences.WindowHeightCm,
-         OpeningImportPreferences.WindowSillCm, OpeningImportPreferences.EmptyOpeningHeightCm);
 
     /// <summary>Asks the user for a DXF file; returns <c>null</c> when cancelled.</summary>
     private static string? PickDxf()
@@ -275,35 +159,28 @@ public sealed class ImportDxfCommand : IExternalCommand
     }
 
     /// <summary>
-    /// Shows the import summary: counts, skipped ambiguous pairs, grouped failures and informational
-    /// notes (for example columns that were created as DirectShapes).
+    /// Shows the import summary: what each module created, elements already in the model, Revit's
+    /// overlap warnings, skipped ambiguous wall faces, failures and notes per module, the sections
+    /// of the modules (for example opening marker warnings) and the other Revit warnings.
     /// </summary>
     private static void ShowSummary(
         string path,
         DxfCenterLinePipeline.Result pipe,
-        IReadOnlyList<WallCreationResult> walls,
-        IReadOnlyList<ColumnCreationResult> columns,
-        IReadOnlyList<OpeningCreationResult> openings,
-        bool openingsIncluded,
-        IReadOnlyList<RevitWarningGroup> revitWarnings,
-        SkippedCounts skipped)
+        IReadOnlyList<ImportModuleResult> results,
+        IReadOnlyDictionary<ImportCategory, int> skipped,
+        IReadOnlyList<RevitWarningGroup> revitWarnings)
     {
-        int wallsOk = walls.Count(r => r.Success);
-        int columnsOk = columns.Count(r => r.Success);
-        int openingsOk = openings.Count(r => r.Success);
-
         var sb = new StringBuilder();
         sb.AppendLine($"DXF: {System.IO.Path.GetFileName(path)}");
         sb.AppendLine($"Wall lines: {pipe.WallLineCount}, face pairs: {pipe.PairCount}, wall solids: {pipe.WallSolidCount}");
-        sb.AppendLine($"Walls created: {wallsOk} / {walls.Count}");
-        sb.AppendLine($"Columns created: {columnsOk} / {columns.Count}");
-        if (openingsIncluded)
-            sb.AppendLine($"Openings created: {openingsOk} / {openings.Count} (markers in DXF: {pipe.OpeningMarkerCount})");
+        foreach (ImportModuleResult r in results.Where(r => r.Included))
+            sb.AppendLine($"{r.Name} created: {r.Created} / {r.Entries.Count}{(r.CountSuffix is null ? string.Empty : " " + r.CountSuffix)}");
 
-        if (skipped.Total > 0)
+        if (skipped.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"Already in the model, not created again: {skipped.Describe()}.");
+            string list = string.Join(", ", skipped.Select(s => $"{s.Value} {s.Key.Name.ToLowerInvariant()}"));
+            sb.AppendLine($"Already in the model, not created again: {list}.");
         }
 
         IReadOnlyList<RevitWarningGroup> overlapWarnings =
@@ -325,25 +202,23 @@ public sealed class ImportDxfCommand : IExternalCommand
                 sb.AppendLine($"  - {a}");
         }
 
-        AppendFailures(sb, "Walls failed", walls.Where(r => !r.Success).Select(r => (r.RequestId, r.Message)).ToList());
-        AppendFailures(sb, "Columns failed", columns.Where(r => !r.Success).Select(r => (r.RequestId, r.Message)).ToList());
-        AppendFailures(sb, "Column notes", columns.Where(r => r.Success && r.Message is not null).Select(r => (r.RequestId, r.Message)).ToList());
-
-        if (openingsIncluded)
+        foreach (ImportModuleResult r in results)
         {
-            AppendFailures(sb, "Openings failed", openings.Where(r => !r.Success).Select(r => (r.RequestId, r.Message)).ToList());
-            AppendFailures(sb, "Opening notes", openings.Where(r => r.Success && r.Message is not null).Select(r => (r.RequestId, r.Message)).ToList());
-            AppendOpeningIssues(sb, "Opening markers not imported", pipe.OpeningIssues.Where(i => i.Severity == OpeningIssueSeverity.Error).ToList());
-            AppendOpeningIssues(sb, "Opening warnings", pipe.OpeningIssues.Where(i => i.Severity == OpeningIssueSeverity.Warning).ToList());
+            AppendFailures(sb, $"{r.Name} failed", r.Entries.Where(e => !e.Success).Select(e => (e.RequestId, e.Message)).ToList());
+            AppendFailures(sb, r.NoteTitle, r.Entries.Where(e => e.Success && e.Message is not null).Select(e => (e.RequestId, e.Message)).ToList());
+            foreach (ImportReportSection section in r.Sections)
+            {
+                sb.AppendLine();
+                sb.AppendLine($"{section.Title} ({section.Count}):");
+                foreach (string line in section.Lines)
+                    sb.AppendLine($"  - {line}");
+            }
         }
 
         AppendRevitWarnings(sb, revitWarnings.Where(w => w.Kind == RevitWarningKind.Other).ToList(),
             "Other Revit warnings");
 
-        bool allOk = !overlaps &&
-                     wallsOk == walls.Count && columnsOk == columns.Count &&
-                     (!openingsIncluded || (openingsOk == openings.Count &&
-                                            pipe.OpeningIssues.All(i => i.Severity != OpeningIssueSeverity.Error)));
+        bool allOk = !overlaps && results.All(r => r.IsComplete);
         new TaskDialog("DxfToRevit")
         {
             MainInstruction = overlaps
@@ -351,38 +226,6 @@ public sealed class ImportDxfCommand : IExternalCommand
                 : allOk ? "Import finished" : "Import finished with issues",
             MainContent = sb.ToString()
         }.Show();
-    }
-
-    /// <summary>
-    /// Maps each wall request id to the element id of its wall, so openings can find their host walls:
-    /// the wall created now, otherwise the matching wall already in the model.
-    /// </summary>
-    private static IReadOnlyDictionary<string, string> MapHostWallIds(
-        IReadOnlyList<WallCreationResult> created, IReadOnlyDictionary<string, string> existing)
-    {
-        var hosts = new Dictionary<string, string>(existing, StringComparer.Ordinal);
-        foreach (WallCreationResult r in created.Where(r => r.Success && r.HostElementId is not null))
-            hosts[r.RequestId] = r.HostElementId!;
-        return hosts;
-    }
-
-    /// <summary>
-    /// Appends a titled section of opening issues grouped by code, with up to five DXF locations each.
-    /// </summary>
-    private static void AppendOpeningIssues(StringBuilder sb, string title, IReadOnlyList<OpeningIssue> issues)
-    {
-        if (issues.Count == 0)
-            return;
-
-        sb.AppendLine();
-        sb.AppendLine($"{title} ({issues.Count}):");
-
-        foreach (var group in issues.GroupBy(i => i.Code).Take(MaxListedItems))
-        {
-            string where = string.Join(", ", group.Take(5).Select(i => $"({i.LocationMm.X:F0}, {i.LocationMm.Y:F0})"));
-            string more = group.Count() > 5 ? $", +{group.Count() - 5} more" : string.Empty;
-            sb.AppendLine($"  - {group.Key} at {where}{more}: {group.First().Message}");
-        }
     }
 
     /// <summary>Appends a titled section of Revit warnings: text, how often, and how many elements.</summary>

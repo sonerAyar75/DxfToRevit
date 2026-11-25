@@ -34,6 +34,11 @@ DxfToRevit builds the Revit model from it.
 | 14 | Circle count duplicated what the `TYPE` family already says | One circle per door or window: swing side and hinge end only | `OpeningInterpreter`, `OpeningHanding` |
 | 15 | Importing the same drawing twice gave no message | Revit's overlap warnings are collected and shown first in the summary | `RevitWarningLog`, `RevitBatchResult` |
 | 16 | Adding elements to an imported drawing meant importing everything again | Category check boxes; elements already in the model are skipped and host the new doors and windows | `ExistingElementMatcher`, `RevitExistingElementReader`, `ImportSelectionPreferences` |
+| 17 | Floors, rooms and roofs are next; every element type was wired in by hand | Every kind of element is an import module run by a coordinator | `IImportModule`, `ImportCoordinator`, `ImportModuleCatalog` |
+| 18 | Mixed folder conventions, several types per file, outdated names | Folders and namespaces by feature, one type per file, sorted usings | (structure only) |
+| 19 | One Revit class created every element and another resolved every type | A facade over one writer and one type resolver per kind of element; batch participants | `RevitWallWriter`, `RevitColumnWriter`, `RevitOpeningWriter`, `IRevitBatchParticipant` |
+| 20 | New modules had to extend the analysis result; wall and column layer names were fixed in code | Modules get the drawing (document + analysis); layer rules are data | `DxfDrawing`, `LayerRules`, `WallLayerRule`, `ColumnLayerRule` |
+| 21 | The settings dialog drew every module; choices were global static state | Settings sections per module (Composite); one session settings object; choice → option rules in the core, tested | `IImportSettingsSection`, `ImportSettings`, `ColumnImportSettings` |
 
 ## Classes by need (short)
 
@@ -50,8 +55,8 @@ DxfToRevit builds the Revit model from it.
 | Check without Revit | `DxfSimulationWriter`, `InMemoryBuildingModel` and the in-memory creators |
 | Describe what to build, independent of Revit | `WallCreationRequest`, `ColumnCreationRequest`, `OpeningCreationRequest`, their factories and validators, `BuildingModelService` |
 | Decide Revit details without the API (testable) | `LengthUnitConverter`, the `*CreateArgsMapper`s, `LevelMatchPlanner`, `WallTypeMatchPlanner`, `ColumnTypeMatchPlanner`, `OpeningOrientationPlanner`, `OpeningTypeKey` |
-| Write to Revit | `RevitApiDocumentContext`, `RevitElementResolver`, `RevitColumnPlacement`, `RevitFreeformColumnFamilyBuilder`, `RevitImportBatch` |
-| User interface | `DxfToRevitApplication`, `ImportDxfCommand`, `ColumnImportSettingsForm`, `OpeningTypeMapForm`, the preferences classes |
+| Write to Revit | `RevitApiDocumentContext`, the writers and type resolvers of each feature, `RevitColumnPlacement`, `RevitFreeformColumnFamilyBuilder`, `RevitImportBatch` |
+| User interface | `DxfToRevitApplication`, `ImportDxfCommand`, `ImportSettingsForm`, `OpeningTypeMapForm`, the preferences classes |
 
 ---
 
@@ -358,6 +363,129 @@ in Revit are recognised too.
 - Not done on purpose: elements deleted from the drawing are not deleted from the model, and a wall
   changed in the drawing is created again (Revit reports the overlap).
 
+## Stage 17 - Import modules
+
+**Requirement.** Next come floors, rooms, ceilings and roofs. Walls, columns and openings were
+wired into the import command, the settings dialog and the summary one by one, so every new kind
+of element would have touched all of them. The structure should be flexible and easy to extend.
+
+**Decision.** Every kind of element is an import module; the flow works with modules only. No
+behaviour changes: the existing tests pass unchanged, and new tests run the whole flow with the
+in-memory creators.
+
+- `IImportModule` (Core): categories (check boxes), `Order`, `RegenerateAfter`, `CountInDrawing`,
+  `Plan` (requests, elements already in the model) and `Create`. `WallImportModule`,
+  `ColumnImportModule` and `OpeningImportModule` hold what the command did before.
+- `ImportCoordinator` orders the modules, plans, creates and regenerates; `ImportBag` carries the
+  module options (`ColumnImportOptions`, `OpeningImportOptions`) and the data modules share
+  (`HostWallMap`: walls created now or already in the model, for the doors and windows).
+- `ImportModuleResult` is the same for every module: entries, notes, extra summary sections (the
+  opening marker issues) and `WithCommitOutcome` for elements Revit removed at commit.
+- Add-in: `ImportModuleCatalog` registers the modules; the settings dialog builds its check boxes
+  from the module categories; `ImportSelectionPreferences` keeps the choices by category key, so a
+  new module is imported by default; the summary is written from the module results.
+- How to add a module (for example floors) is described in `docs/import_modules.md`. A drawing of
+  another kind (a section for extrusion roofs) would be a separate ribbon command reusing the same
+  pattern.
+
+## Stage 18 - Folders by feature, one type per file
+
+**Requirement.** The structure should be modular, easy to extend and easy to read. Walls and
+columns were spread over technical folders (`Dxf`, `Models`, `Rules`, `Services`, `Geometry`,
+`Building`) while openings had their own folder; 30 files held several types; some names no longer
+matched what the classes do.
+
+**Decision.** Organise the core by feature, as the import modules are. No behaviour changes: the
+same tests pass (309 core, 88 Revit adapter tests), the build has no warnings.
+
+- Core folders and namespaces: `Walls`, `Columns`, `Openings` (each with its rule, reading,
+  interpretation, requests, validation, creator interface and import module), `Import` (the
+  modular import, session options, placement, elements already in the model,
+  `BuildingModelService`), `Dxf` (loading, line extraction, the analysis pipeline, the simulation
+  output), `Geometry` (shared 2D algorithms), `InMemory`, `Composition`. The old `Building`,
+  `Models`, `Rules`, `Services` and `IO` folders are gone. Files were moved with `git mv`, so their
+  history is kept.
+- One type per file: 30 files were split with a small Roslyn tool (doc comments travel with their
+  types); `RevitImportBatch.cs` was split by hand because of its `#if` block.
+- Test folders mirror the core folders; `LengthUnitConverterTests` moved to the Revit adapter
+  tests, next to the class it tests.
+- Unused `using` directives were removed (IDE0005) and every using block is sorted. Revit
+  sources are compiled twice (without and with `REVIT_API_AVAILABLE`), so usings needed only by
+  the Revit API code were kept.
+- Renamed: `ColumnImportSettingsForm` → `ImportSettingsForm`, `ColumnSettingsCommand` →
+  `SettingsCommand` (the ribbon button keeps its internal name).
+
+## Stage 19 - One Revit writer per kind of element
+
+**Requirement.** `RevitApiDocumentContext` (about 730 lines) created walls, columns in three ways,
+doors, windows and openings, flipped doors and windows, and ran the batch; `RevitElementResolver`
+(about 650 lines) resolved levels, wall types, column types and door/window types. Floors would
+have made both larger again.
+
+**Decision.** Split by kind of element, keep the public surface. No behaviour changes: the code was
+moved, not rewritten, and the add-in and the tests use the same `IRevitDocumentContext`.
+
+- `RevitApiDocumentContext` is a **facade**: it builds one writer per kind of element and
+  delegates (`RevitWallWriter`, `RevitColumnWriter` with `RevitColumnSolidWriter` for columns
+  without a family, `RevitOpeningWriter`).
+- The resolver is split into `RevitLevelResolver` (shared; it also checks that the top level is
+  above the base level, which three writers did by hand), `RevitWallTypeResolver`,
+  `RevitColumnTypeResolver` and `RevitOpeningTypeResolver`; `RevitParameters` holds the parameter
+  helpers they share.
+- The batch no longer knows about doors: writers that defer work implement
+  `IRevitBatchParticipant` (started, before commit, ended). The opening writer collects the door and
+  window flips and applies them before the commit; a floor writer could take part the same way.
+- The Revit project is organised by feature like the core: `Walls`, `Columns`, `Openings`,
+  `Import` (batch, failure handler, warnings, existing elements) and `Common`.
+- The unused `GetOpeningTypeKeys` of the context was removed (the settings dialog reads the types
+  itself).
+
+## Stage 20 - Drawing input for modules, layer rules as data
+
+**Requirement.** A new module (floors, rooms) had to add its elements to
+`DxfCenterLinePipeline.Result`, so every new kind of element changed the analysis class. Wall and
+column layer names were fixed in code (`WALL-*`, `COLUMN*`), while doors and windows were already
+defined by data (`OpeningDefinitionRegistry`).
+
+**Decision.** Keep the analysis for what belongs together, give modules the document for the rest,
+and make the layer rules data. No behaviour changes with the defaults.
+
+- `DxfDrawing` (the loaded `DxfDocument` with its analysis) is the input of the modules
+  (`ImportPlanContext.Drawing`, `IImportModule.CountInDrawing`); `DxfCenterLinePipeline.AnalyzeDrawing`
+  returns it. Walls, columns and openings stay in one analysis because they depend on each other
+  (openings bridge wall gaps and are attached to footprints; columns close gaps); a floor module
+  reads its outlines from `DxfDrawing.Document` with its own reader, without touching the analysis.
+- `WallLayerRule` takes its base names and `ColumnLayerRule` its names and prefixes as data;
+  `LayerRules` groups them (`LayerRules.Default` is the standard naming). The pipeline passes them to
+  the line classifier, the wall models and the column reader. A layer mapping file for other office
+  standards can now be added without changing the analysis.
+
+## Stage 21 - Settings by module, no global preferences
+
+**Requirement.** The settings dialog (about 840 lines) drew the options of every module itself,
+so a new module meant editing it. Choices were kept in three static classes
+(`ImportSelectionPreferences`, `ColumnImportPreferences`, `OpeningImportPreferences`) read and
+written from anywhere, and the rules that turn them into module options (for example "round solids
+→ the DirectShape key") lived in the import command, untested.
+
+**Decision.** Each module brings its own section; choices live in one settings object that is
+passed around; the choice → option rules move to the core and are tested. The dialog looks and
+behaves as before.
+
+- Core: `ImportSelectionSettings`, `ColumnImportSettings` (with `CircularColumnMode`) and
+  `OpeningImportSettings`, each with `ToOptions()` (and `CreateRegistry()` for the opening heights);
+  covered by `ImportSettingsTests`.
+- Add-in: `ImportSettings` groups them; `ImportSettings.Session` is the one instance kept for the
+  Revit session and is passed to the dialogs and commands (no other global state).
+- `IImportSettingsSection` (Composite): `CreateControls`, `Refresh` (the chosen categories changed),
+  `Confirm` (checks, may ask the user), `Save`. `LevelSettingsSection`, `ColumnSettingsSection` and
+  `OpeningSettingsSection` hold what the dialog did before; `ImportSettingsForm` only shows the
+  Import group, arranges the sections and runs their checks.
+- `ImportModuleCatalog` now registers, for each module, its settings section
+  (`CreateSettingsSections`) and its options (`CreateModuleOptions`), next to the module itself.
+- On *Continue* the column checks now run before the door and window check (the sections are
+  checked in display order); otherwise the dialog behaves as before.
+
 ---
 
 # Part 3 - Class reference by need
@@ -456,13 +584,15 @@ the generated API reference.
 | Class | Why it exists | Important members |
 |-------|---------------|-------------------|
 | `IRevitDocumentContext`, `NullRevitDocumentContext` | Creators work with or without a document | `CreateBasicWall`, `CreateColumn`, `CreateOpening` |
-| `RevitApiDocumentContext` | The only class that creates elements | the create methods, `BeginBatch(name)`, `GetOpeningTypeKeys(category)` |
-| `RevitElementResolver` | Levels and types, created when missing, cached | `ResolveLevel`, `ResolveWallType`, `ResolveColumnSymbol`, `ResolveOpeningSymbol` |
+| `RevitApiDocumentContext` | Facade over the writers; runs the import batch and notifies its participants | the create methods, `BeginBatch(name)` |
+| `RevitWallWriter`, `RevitColumnWriter`, `RevitColumnSolidWriter`, `RevitOpeningWriter` | One writer per kind of element; the opening writer defers door and window flips to the end of the batch (`IRevitBatchParticipant`) | `Create`, `BeforeCommit` |
+| `RevitLevelResolver`, `RevitWallTypeResolver`, `RevitColumnTypeResolver`, `RevitOpeningTypeResolver` | Levels and types, created when missing, cached | `TryResolve`, `Resolve` |
 | `RevitColumnPlacement` | Column level constraints | `TryApplyHeight` |
 | `RevitFreeformColumnFamilyBuilder` | Level-bound families for freeform sections | `GetOrCreate(profile, out error)` |
 | `RevitWallCreator`, `RevitColumnCreator`, `RevitOpeningCreator` | Building API → document context | `CreateWall`, `CreateColumn`, `CreateOpening` |
 | `RevitImportBatch`, `RevitChangeScope`, `RevitBatchFailureHandler` | Fast, single-undo import that survives failing elements | `Regenerate`, `Commit`, `Start`, `PreprocessFailures` |
 | `RevitWarningLog`, `RevitWarningGroup` | Keeps the warnings Revit raises at commit, so overlaps (a drawing imported twice) reach the summary | `Add`, `Groups`, `RevitBatchResult.HasOverlaps` |
+| `IImportModule`, `ImportCoordinator`, `ImportModuleCatalog` | One kind of element per module; the flow, the settings check boxes and the summary work with any module | `Plan`, `Create`, `CountInDrawing`, `WithCommitOutcome` |
 
 ## User interface (add-in)
 
@@ -470,7 +600,8 @@ the generated API reference.
 |-------|---------------|-------------------|
 | `DxfToRevitApplication` | Ribbon tab with themed icons | `OnStartup` |
 | `ImportDxfCommand` | The import: DXF → analysis → settings → requests → batch → summary | `Execute` |
-| `ColumnSettingsCommand`, `AboutCommand` | Settings without importing; about box | `Execute` |
-| `ColumnImportSettingsForm` | Levels, column modes, openings on/off, DXF summary | `SelectedBaseLevelName`, `IncludeOpenings`, … |
+| `SettingsCommand`, `AboutCommand` | Settings without importing; about box | `Execute` |
+| `ImportSettingsForm` | Categories to import, levels, column modes, DXF summary | `IncludedCategoryKeys`, `SkipExisting`, `SelectedBaseLevelName`, … |
 | `OpeningTypeMapForm` | Map DXF codes to Revit types, default heights | right-click type menu, load/save file |
-| `ColumnImportPreferences`, `OpeningImportPreferences` | Remember choices for the Revit session | `CreateRegistry()` |
+| `ImportSettings`, `ImportSelectionSettings`, `ColumnImportSettings`, `OpeningImportSettings` | Remember choices for the Revit session; turn them into module options | `ToOptions()`, `CreateRegistry()` |
+| `IImportSettingsSection`, `LevelSettingsSection`, `ColumnSettingsSection`, `OpeningSettingsSection` | One part of the settings dialog each; the dialog arranges them | `CreateControls`, `Refresh`, `Confirm`, `Save` |

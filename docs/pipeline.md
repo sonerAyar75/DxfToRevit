@@ -1,6 +1,6 @@
 # Centerline pipeline {#pipeline}
 
-`DxfToRevit.Core.Services.DxfCenterLinePipeline` turns the wall lines of a DXF drawing into
+`DxfToRevit.Core.Dxf.DxfCenterLinePipeline` turns the wall lines of a DXF drawing into
 centerlines and closed wall footprints, and reads the columns. `Analyze(path)` returns the
 result without writing anything; `Run(path, output)` also writes the simulation DXF.
 
@@ -15,6 +15,16 @@ result without writing anything; `Run(path, output)` also writes the simulation 
 | Units | Millimetres |
 
 Only wall lines whose layer carries a thickness code take part in face pairing.
+
+The layer names above are the default `LayerRules`: a `WallLayerRule` with the base name `WALL`
+and a `ColumnLayerRule` with the names `COLUMN`, `COLUMNS` and the prefix `COLUMN-`. Both take
+their names as data (for example `new WallLayerRule(new[] { "A-WALL" })` for `A-WALL-20`), and
+`new DxfCenterLinePipeline(openingDefinitions, layerRules)` passes them to the line classifier, the
+wall models and the column reader. Doors, windows and openings are recognised by block name through
+`OpeningDefinitionRegistry`.
+
+`Analyze` returns the result only; `AnalyzeDrawing` returns a `DxfDrawing`, the loaded document
+with its analysis, which is the input of the import modules (see @ref import_modules).
 
 ## Stages
 

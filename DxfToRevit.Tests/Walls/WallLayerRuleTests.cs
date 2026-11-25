@@ -1,6 +1,6 @@
 ﻿
-using DxfToRevit.Core.Rules;
-using Xunit;
+
+using DxfToRevit.Core.Walls;
 
 namespace DxfToRevit.Tests.Walls;
 

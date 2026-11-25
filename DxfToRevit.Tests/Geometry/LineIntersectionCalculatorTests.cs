@@ -1,9 +1,8 @@
 ﻿
 using DxfToRevit.Core.Geometry;
 using netDxf;
-using Xunit;
 
-namespace DxfToRevit.Tests.Core.Geometry;
+namespace DxfToRevit.Tests.Geometry;
 
 /// <summary>
 /// Intersection of the supporting lines of two segments: p + t·r = q + u·s, t = (qp×s)/(r×s). Parallel (r×s ≈ 0 or IsParallelTo) → false.

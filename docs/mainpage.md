@@ -14,6 +14,7 @@ centerlines with correct L/T junctions, and creates native Revit elements bound 
 | @subpage columns | How column sections are classified and created in Revit |
 | @subpage openings | Doors, windows and empty openings: DXF markers, wall matching, type mapping |
 | @subpage revit_addin | Ribbon commands, import settings, transactions, deployment |
+| @subpage import_modules | How each kind of element is an import module, and how to add one (floors, rooms, ...) |
 | @subpage installation | Building and using the Inno Setup installer |
 | @subpage testing | Test projects and how to run them |
 | @subpage documentation | How this documentation is generated |

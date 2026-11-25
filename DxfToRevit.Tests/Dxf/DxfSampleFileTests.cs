@@ -1,8 +1,7 @@
 ﻿
+
 using DxfToRevit.Core.Dxf;
-using DxfToRevit.Core.Models;
-using DxfToRevit.Core.Services;
-using Xunit;
+using DxfToRevit.Core.Walls;
 
 namespace DxfToRevit.Tests.Dxf;
 

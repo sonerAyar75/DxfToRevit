@@ -1,5 +1,7 @@
-using DxfToRevit.Core.Building;
-using DxfToRevit.Revit;
+using DxfToRevit.Core.Columns;
+using DxfToRevit.Core.Import;
+using DxfToRevit.Revit.Columns;
+using DxfToRevit.Revit.Common;
 using netDxf;
 
 namespace DxfToRevit.Revit.Tests.Mapping;
@@ -86,7 +88,7 @@ public sealed class ColumnCreateArgsMapperTests
     public void Map_SessionWithTopLevel_ColumnCarriesTopLevel()
     {
         var session = new ImportSessionOptions(baseLevelName: "Level 1", topLevelName: "Level 2");
-        var column = new DxfToRevit.Core.Models.ColumnModel(
+        var column = new DxfToRevit.Core.Columns.ColumnModel(
             "C3", "COLUMN", "A1",
             new[] { new Vector2(0, 0), new Vector2(400, 0), new Vector2(400, 400), new Vector2(0, 400) });
 

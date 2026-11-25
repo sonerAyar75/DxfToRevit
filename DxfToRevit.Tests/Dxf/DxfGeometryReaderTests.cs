@@ -2,10 +2,9 @@
 
 
 using DxfToRevit.Core.Dxf;
-using netDxf;
 using netDxf.Entities;
 using netDxf.Tables;
-using Xunit;
+using netDxf;
 
 namespace DxfToRevit.Tests.Dxf;
 

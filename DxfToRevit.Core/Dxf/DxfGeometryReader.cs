@@ -1,7 +1,6 @@
 using DxfToRevit.Core.Geometry;
-using DxfToRevit.Core.Models;
-using netDxf;
 using netDxf.Entities;
+using netDxf;
 
 namespace DxfToRevit.Core.Dxf;
 

@@ -1,4 +1,4 @@
-using DxfToRevit.Revit;
+using DxfToRevit.Revit.Import;
 
 namespace DxfToRevit.Revit.Tests.Mapping;
 
